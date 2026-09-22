@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Paycheck calculator — NYC hourly</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" />
+<link rel="stylesheet" href="/lesson-kit/lesson.css" />
+<style>
+  .lay { display: grid; grid-template-columns: minmax(260px, .9fr) minmax(0, 1.2fr); gap: 18px; align-items: start; }
+  .field { display: grid; gap: 4px; margin-bottom: 12px; }
+  .field input, .field select { width: 100%; }
+  .stub { font-family: var(--font-mono); font-size: 14px; }
+  .stub table { margin-bottom: 14px; }
+  .stub .total td { font-weight: 700; border-top: 1.5px solid var(--ink); }
+  .net { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 18px; background: var(--ink); color: var(--paper); border-radius: 12px; }
+  .net .big { color: #fff; }
+  .bar { display: flex; height: 22px; border: 1.5px solid var(--ink); border-radius: 999px; overflow: hidden; margin: 14px 0 6px; }
+  .bar i { display: block; height: 100%; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--mute); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .raise { margin-top: 14px; }
+  @media (max-width: 640px) { .lay { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body class="finance">
+<div class="wrap">
+  <p class="kicker">Financial Literacy · Paychecks · Interactive</p>
+  <h1>Paycheck calculator</h1>
+  <p class="lede">Hourly rate and hours in, take-home pay out. FICA is exact. The income taxes are an estimate for a single filer living in NYC with a standard W-4 — close enough to see where the money goes.</p>
+
+  <div class="lay">
+    <div class="card pop">
+      <div class="field"><label for="rate">Hourly rate ($)</label><input type="number" id="rate" value="18" min="0" step="0.25" /></div>
+      <div class="field"><label for="hours">Hours per week</label><input type="number" id="hours" value="40" min="0" max="80" step="0.5" /></div>
+      <div class="field"><label for="period">Paid every</label><select id="period"><option value="1">week</option><option value="2" selected>two weeks</option></select></div>
+      <div class="field"><label for="k401">401(k) contribution (% of gross, before tax)</label><input type="number" id="k401" value="0" min="0" max="50" step="1" /></div>
+      <div class="callout" style="margin:14px 0 0"><b>Overtime:</b> hours over 40 in a week are paid at 1.5× the rate.</div>
+      <div class="raise">
+        <label for="raise">What if I got a raise of ($/hour)</label>
+        <div class="row" style="margin-top:4px"><input type="number" id="raise" value="2" min="0" step="0.25" style="width:100px" /><span id="raiseOut" class="mute" style="font-size:14px"></span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card stub">
+        <table>
+          <tr><th>Earnings</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Amount</th></tr>
+          <tr><td>Regular</td><td class="num" id="regH"></td><td class="num" id="regR"></td><td class="num" id="regA"></td></tr>
+          <tr id="otRow"><td>Overtime (1.5×)</td><td class="num" id="otH"></td><td class="num" id="otR"></td><td class="num" id="otA"></td></tr>
+          <tr class="total"><td colspan="3">Gross pay</td><td class="num" id="gross"></td></tr>
+        </table>
+        <table>
+          <tr><th>Deductions</th><th class="num">Rate</th><th class="num">Amount</th></tr>
+          <tr id="k401Row"><td>401(k) (pre-tax)</td><td class="num" id="k401R"></td><td class="num" id="k401A"></td></tr>
+          <tr><td>Social Security</td><td class="num">6.20%</td><td class="num" id="ss"></td></tr>
+          <tr><td>Medicare</td><td class="num">1.45%</td><td class="num" id="med"></td></tr>
+          <tr><td>Federal income tax (est.)</td><td class="num" id="fedR"></td><td class="num" id="fed"></td></tr>
+          <tr><td>NY State income tax (est.)</td><td class="num" id="nysR"></td><td class="num" id="nys"></td></tr>
+          <tr><td>NYC income tax (est.)</td><td class="num" id="nycR"></td><td class="num" id="nyc"></td></tr>
+          <tr><td>NY SDI / PFL</td><td class="num">—</td><td class="num" id="sdi"></td></tr>
+          <tr class="total"><td colspan="2">Total deductions</td><td class="num" id="ded"></td></tr>
+        </table>
+        <div class="net"><span>Net pay <span class="mute" id="perLabel"></span></span><span class="big" id="net"></span></div>
+        <div class="bar" id="bar"></div>
+        <div class="legend">
+          <span><i style="background:#1f6f45"></i>you keep</span><span><i style="background:#3a3a3a"></i>FICA</span><span><i style="background:#b5471f"></i>income taxes</span><span><i style="background:#1f4fb5"></i>401(k)</span>
+        </div>
+      </div>
+      <p class="mute" style="font-size:13px">Estimates use 2025 brackets for a single filer with the standard deduction, annualized from this check. Real withholding also depends on your W-4, so your stub may differ by a few dollars.</p>
+    </div>
+  </div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const money = (v) => v.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  const pct = (v) => (100 * v).toFixed(2) + '%';
+
+  // 2025 single-filer brackets (annual, taxable income after standard deduction)
+  const FED = { std: 15000, br: [[11925, .10], [48475, .12], [103350, .22], [197300, .24], [250525, .32], [626350, .35], [Infinity, .37]] };
+  const NYS = { std: 8000, br: [[8500, .04], [11700, .045], [13900, .0525], [80650, .055], [215400, .06], [1077550, .0685], [Infinity, .0965]] };
+  const NYC = { std: 8000, br: [[12000, .03078], [25000, .03762], [50000, .03819], [Infinity, .03876]] };
+  function annualTax(t, income) {
+    let taxable = Math.max(0, income - t.std), tax = 0, prev = 0;
+    for (const [cap, rate] of t.br) { if (taxable <= prev) break; tax += (Math.min(taxable, cap) - prev) * rate; prev = cap; }
+    return tax;
+  }
+
+  function compute(rate, hours, weeks, k401pct) {
+    const reg = Math.min(hours, 40), ot = Math.max(0, hours - 40);
+    const regA = reg * rate * weeks, otA = ot * rate * 1.5 * weeks, gross = regA + otA;
+    const k401 = gross * k401pct;
+    const taxable = gross - k401;
+    const periods = 52 / weeks;
+    const fed = annualTax(FED, taxable * periods) / periods, nys = annualTax(NYS, taxable * periods) / periods, nyc = annualTax(NYC, taxable * periods) / periods;
+    const ss = gross * .062, med = gross * .0145;
+    const sdi = Math.min(0.5 * weeks, gross * .005) + gross * .00388;   // SDI capped at $0.60/wk-ish, PFL 0.388%
+    const ded = k401 + ss + med + fed + nys + nyc + sdi;
+    return { reg, ot, regA, otA, gross, k401, ss, med, fed, nys, nyc, sdi, ded, net: gross - ded };
+  }
+
+  function render() {
+    const rate = Number($('rate').value) || 0, hours = Number($('hours').value) || 0, weeks = Number($('period').value), k = (Number($('k401').value) || 0) / 100;
+    const r = compute(rate, hours, weeks, k);
+    $('regH').textContent = (r.reg * weeks).toFixed(2); $('regR').textContent = rate.toFixed(2); $('regA').textContent = money(r.regA);
+    $('otRow').style.display = r.ot ? '' : 'none';
+    $('otH').textContent = (r.ot * weeks).toFixed(2); $('otR').textContent = (rate * 1.5).toFixed(2); $('otA').textContent = money(r.otA);
+    $('gross').textContent = money(r.gross);
+    $('k401Row').style.display = k ? '' : 'none'; $('k401R').textContent = pct(k); $('k401A').textContent = money(r.k401);
+    $('ss').textContent = money(r.ss); $('med').textContent = money(r.med);
+    $('fed').textContent = money(r.fed); $('fedR').textContent = r.gross ? pct(r.fed / r.gross) : '—';
+    $('nys').textContent = money(r.nys); $('nysR').textContent = r.gross ? pct(r.nys / r.gross) : '—';
+    $('nyc').textContent = money(r.nyc); $('nycR').textContent = r.gross ? pct(r.nyc / r.gross) : '—';
+    $('sdi').textContent = money(r.sdi); $('ded').textContent = money(r.ded);
+    $('net').textContent = money(r.net); $('perLabel').textContent = weeks === 1 ? '(per week)' : '(per two weeks)';
+    const g = r.gross || 1;
+    $('bar').innerHTML = `<i style="width:${100 * r.net / g}%;background:#1f6f45"></i><i style="width:${100 * (r.ss + r.med) / g}%;background:#3a3a3a"></i><i style="width:${100 * (r.fed + r.nys + r.nyc + r.sdi) / g}%;background:#b5471f"></i><i style="width:${100 * r.k401 / g}%;background:#1f4fb5"></i>`;
+    const raise = Number($('raise').value) || 0;
+    if (raise > 0 && r.gross) {
+      const r2 = compute(rate + raise, hours, weeks, k);
+      const dg = r2.gross - r.gross, dn = r2.net - r.net;
+      $('raiseOut').textContent = `+${money(dg)} gross → +${money(dn)} in your account (${Math.round(100 * dn / dg)}¢ of every dollar)`;
+    } else $('raiseOut').textContent = '';
+  }
+  ['rate', 'hours', 'period', 'k401', 'raise'].forEach((id) => $(id).addEventListener('input', render));
+  render();
+</script>
+</body>
+</html>

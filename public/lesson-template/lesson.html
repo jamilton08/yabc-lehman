@@ -1,0 +1,107 @@
+<!doctype html>
+<!--
+  LESSON TEMPLATE — Mr. Cruz · The Lehman YABC
+  Copy this folder to public/lesson-files/<course>/<lesson-slug>/, rename this
+  file to index.html, add the lesson to src/site/lessons.js with
+  `file: 'index.html'`, and build the lesson in here. It runs in a frame on
+  the site (and opens fine in its own tab).
+
+  Grading: the kit at /lesson-kit/yabc-lesson.js gives the page a clock, a
+  log, and the result card. Four calls:
+    YABC.lesson({ id, title, version, course, possible })  once, at load
+    YABC.start(name)                                       when the student begins
+    YABC.log(type, data)                                   anything worth recording
+    YABC.endScreen(el, { earned, possible, sections, tier })  at the end
+  The card seals an encrypted .yabc file the student downloads and submits
+  in Google Classroom; you open it at /lessons/verify with your private key.
+
+  Prompting an AI to build a lesson from this template works well: paste this
+  file and say what the lesson should teach and how it should be scored.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lesson title — Mr. Cruz · The Lehman YABC</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" />
+<link rel="stylesheet" href="/lesson-kit/lesson.css" />
+<script src="/lesson-kit/yabc-lesson.js"></script>
+<style>
+  /* lesson-specific styles go here */
+  .q { margin: 0 0 12px; }
+  .q p { margin: 0 0 8px; font-weight: 600; }
+  .q label { display: block; font-weight: 400; padding: 6px 0; }
+</style>
+</head>
+<body class="math"><!-- math | cs | finance sets the accent color -->
+<div class="wrap">
+  <p class="kicker">Math · Equations</p>
+  <h1>Lesson title</h1>
+  <p class="lede">One or two sentences on what the student will be able to do at the end.</p>
+
+  <!-- 1. START: the name gate. Nothing below counts until the student starts. -->
+  <section class="card pop" id="gate">
+    <h2 style="margin-top:0">Start here</h2>
+    <p>Your name goes on the result file. The clock starts when you press Start.</p>
+    <div class="row">
+      <input type="text" id="name" placeholder="First and last name" autocomplete="name" style="flex:1;min-width:220px" />
+      <button class="btn ink" id="start">Start</button>
+    </div>
+    <p class="bad" id="gate-err" style="margin:8px 0 0"></p>
+  </section>
+
+  <!-- 2. THE WORK: replace with the actual lesson. This example is a tiny quiz. -->
+  <section class="card" id="work" hidden>
+    <h2 style="margin-top:0">Warm-up</h2>
+    <div class="q" data-q="q1" data-answer="b" data-points="1">
+      <p>1. What is 7 × 8?</p>
+      <label><input type="radio" name="q1" value="a" /> 54</label>
+      <label><input type="radio" name="q1" value="b" /> 56</label>
+      <label><input type="radio" name="q1" value="c" /> 64</label>
+    </div>
+    <div class="q" data-q="q2" data-answer="b" data-points="1">
+      <p>2. Solve 3x = 12.</p>
+      <label><input type="radio" name="q2" value="a" /> x = 3</label>
+      <label><input type="radio" name="q2" value="b" /> x = 4</label>
+      <label><input type="radio" name="q2" value="c" /> x = 36</label>
+    </div>
+    <button class="btn acc" id="finish">Finish and get my result file</button>
+  </section>
+
+  <!-- 3. THE RESULT CARD lands here. -->
+  <div id="result"></div>
+</div>
+
+<script>
+  // Tell the kit which lesson this is (id = the folder name in lessons.js).
+  YABC.lesson({ id: 'lesson-slug', title: 'Lesson title', version: '1.0', course: 'math', possible: 2 });
+
+  const $ = (id) => document.getElementById(id);
+  $('start').onclick = () => {
+    try {
+      YABC.start($('name').value);                 // starts the clock; throws if the name is too short
+      $('gate').hidden = true; $('work').hidden = false;
+    } catch (e) { $('gate-err').textContent = e.message; }
+  };
+  $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('start').click(); });
+
+  $('finish').onclick = async () => {
+    // Score the work however the lesson needs. This example: 1 point per right radio.
+    const sections = [];
+    let earned = 0, possible = 0;
+    document.querySelectorAll('.q').forEach((q) => {
+      const pts = Number(q.dataset.points || 1), pick = q.querySelector('input:checked');
+      const right = pick && pick.value === q.dataset.answer;
+      possible += pts; if (right) earned += pts;
+      YABC.log('answer', { q: q.dataset.q, given: pick ? pick.value : null, right: Boolean(right) });
+      sections.push({ id: q.dataset.q, title: q.querySelector('p').textContent, earned: right ? pts : 0, possible: pts });
+    });
+    const pct = possible ? Math.round(100 * earned / possible) : 100;
+    const tier = pct >= 90 ? 'Mastered' : pct >= 75 ? 'Proficient' : pct >= 60 ? 'Developing' : 'Keep going';
+    $('finish').disabled = true;
+    await YABC.endScreen('#result', { earned, possible, sections, tier });
+    $('result').scrollIntoView({ behavior: 'smooth' });
+  };
+</script>
+</body>
+</html>
