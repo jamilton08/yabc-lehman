@@ -51,6 +51,7 @@ function CalcWork({ work }) {
         <details key={p.n} className={`vf-prob st-${p.status}`}>
           <summary>
             <span className="vf-pn">{p.n}</span>
+            {p.ask && <span className="vf-ask">{p.ask}</span>}
             <span className="vf-peq">{p.kind === 'spot' ? `Spot ${p.spot}: ` : ''}{p.kind === 'angles' && p.labels ? `${RELATION[p.relation] || p.relation}: ${p.labels.join(', ')}` : p.start || p.eq}</span>
             <span>{STATUS[p.status] || p.status}{p.answer && p.kind !== 'spot' ? ` · ${p.answer}` : ''}</span>
             {(p.kind === 'solve' || p.kind === 'angles') && p.status !== 'broken' && <span>{p.moves} move{p.moves === 1 ? '' : 's'} · par {p.par}{p.hints ? ` · ${p.hints} hint${p.hints === 1 ? '' : 's'}` : ''}{p.undos ? ` · ${p.undos} undo${p.undos === 1 ? '' : 's'}` : ''}</span>}

@@ -109,6 +109,21 @@ export const COURSES = [
               { title: 'Line explorer', file: 'line-explorer.html', kind: 'html', note: 'Drag m and b. Watch the line and the table change together.' },
             ],
           },
+          {
+            slug: 'function-notation',
+            title: 'What f(x) means',
+            description: 'Algebra 2, lesson one. $f(x)$ is "f of x," not f times x. Plug in to find $f(3)$, solve to find when $f(x) = 3$ (on the step calculator), read both off a graph, and see domain and range as the shadows a graph casts on the axes.',
+            md: 'lesson.md',
+            kind: 'lesson',
+            graded: true,
+            minutes: 50,
+            added: '2026-09-29',
+            tags: ['Algebra 2', 'functions', 'function notation', 'f(x)', 'evaluate', 'input', 'output', 'domain', 'range', 'vertical line test', 'graph', 'step calculator', 'Regents'],
+            materials: [
+              { title: 'Function reader', file: 'function-reader.html', kind: 'html', note: 'Drag along a graph to read f(a), or drag a line to solve f(x) = b. Shows domain and range.' },
+              { title: 'Extra practice', file: 'practice.md', kind: 'md', note: 'Plug in, solve, and "which question is it?" Nothing is recorded.' },
+            ],
+          },
         ],
       },
       {

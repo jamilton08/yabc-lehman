@@ -378,6 +378,7 @@ a.nav-group-title:hover { color: var(--ink); }
 .vf-prob.st-solved .vf-pn, .vf-prob.st-right .vf-pn { background: var(--finance); border-color: var(--finance); color: #fff; }
 .vf-prob.st-wrong .vf-pn { background: #a83a2a; border-color: #a83a2a; color: #fff; }
 .vf-peq { font: 700 15px var(--font-display); }
+.vf-ask { flex-basis: 100%; order: -1; font-size: 13px; color: var(--mute); padding-left: 30px; }
 .vf-prob > :not(summary) { margin-left: 12px; margin-right: 12px; }
 .vf-prob > :last-child { margin-bottom: 12px; }
 .vf-tape { display: grid; grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr); column-gap: 8px; padding: 10px 14px; background: #fffdf7; border: 1px dashed var(--line); border-radius: 8px; font: 700 16px/1.35 var(--font-display); overflow-x: auto; }
