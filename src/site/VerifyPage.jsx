@@ -7,6 +7,83 @@ import './site.css';
 const KEY_STORE = 'yabc:verify-private-key';
 const fmtDate = (iso) => { try { return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return iso; } };
 
+const fmtPts = (n) => (n == null ? '—' : String(Math.round(n * 10) / 10));
+const STATUS = { solved: 'Solved', right: 'Right', wrong: 'Missed', open: 'Not finished', broken: 'Could not load' };
+const RELATION = { vertical: 'Vertical angles', linear: 'Linear pair', complementary: 'Complementary', around: 'Around a point', triangle: 'Triangle' };
+
+/** One problem's tape, laid out like the student's screen: = signs lined up, the move under each side. */
+function Tape({ p }) {
+  const rows = [];
+  const row = (key, lr, cls = '', mid = '=') => rows.push(
+    <Fragment key={key}><div className={`vf-tl ${cls}`}>{lr[0]}</div><div className={`vf-te ${cls}`}>{mid}</div><div className={`vf-tr ${cls}`}>{lr[1]}</div></Fragment>
+  );
+  if (p.startSides) row('start', p.startSides);
+  let n = 0, restore = null;
+  (p.steps || []).forEach((s, i) => {
+    if (s.kind === 'hint' || s.kind === 'note') {
+      if (restore) { rows.push(<div key={`b${i}`} className="vf-tnote">↩ back to</div>); row(`br${i}`, restore); restore = null; }
+      rows.push(<div key={i} className={`vf-tnote${s.kind === 'hint' ? ' hint' : ''}`}>{s.kind === 'hint' ? 'Hint: ' : ''}{s.text} <small>{s.t}s</small></div>);
+      return;
+    }
+    if (!s.undone && restore) { rows.push(<div key={`b${i}`} className="vf-tnote">↩ back to</div>); row(`br${i}`, restore); restore = null; }
+    if (!s.undone) n++;
+    const u = s.undone ? 'is-undone' : '';
+    rows.push(
+      <div key={`s${i}`} className={`vf-tsay ${u}`}>
+        <b>{s.undone ? '×' : n}</b> {s.say}{s.undone ? ' — undone' : ''}
+        <small> · {s.via === 'keys' ? 'keyed' : s.via === 'button' ? 'button' : 'tapped'}{s.at ? ` ${s.at}` : ''} · {s.t}s</small>
+      </div>
+    );
+    if (s.op) row(`o${i}`, [s.op, s.op], `vf-top ${u}`, '');
+    row(`t${i}`, s.to, u);
+    if (s.undone) restore = s.from;
+  });
+  if (restore) { rows.push(<div key="bend" className="vf-tnote">↩ back to</div>); row('brend', restore); }
+  return <div className="vf-tape">{rows}</div>;
+}
+
+/** Calculator blocks in a result: a line per problem, the tape on click. */
+function CalcWork({ work }) {
+  return work.map((w) => (
+    <div key={w.calc} className="vf-calc">
+      <h4>{w.title} <small>· {w.moves === 'tap' ? 'tap to move' : w.moves === 'type' ? 'keyed moves' : 'tap or key'}</small></h4>
+      {(w.problems || []).map((p) => (
+        <details key={p.n} className={`vf-prob st-${p.status}`}>
+          <summary>
+            <span className="vf-pn">{p.n}</span>
+            <span className="vf-peq">{p.kind === 'spot' ? `Spot ${p.spot}: ` : ''}{p.kind === 'angles' && p.labels ? `${RELATION[p.relation] || p.relation}: ${p.labels.join(', ')}` : p.start || p.eq}</span>
+            <span>{STATUS[p.status] || p.status}{p.answer && p.kind !== 'spot' ? ` · ${p.answer}` : ''}</span>
+            {(p.kind === 'solve' || p.kind === 'angles') && p.status !== 'broken' && <span>{p.moves} move{p.moves === 1 ? '' : 's'} · par {p.par}{p.hints ? ` · ${p.hints} hint${p.hints === 1 ? '' : 's'}` : ''}{p.undos ? ` · ${p.undos} undo${p.undos === 1 ? '' : 's'}` : ''}</span>}
+            {p.kind === 'spot' && <span>{p.tries} check{p.tries === 1 ? '' : 's'}</span>}
+            <b>{fmtPts(p.earned)} / {fmtPts(p.possible)}</b>
+          </summary>
+          {p.error && <p className="bad">{p.error}</p>}
+          {p.kind === 'spot' && (
+            <div className="vf-spot">
+              {(p.picks || []).map((pk, i) => <p key={i}><strong>Check {i + 1}:</strong> {pk.length ? pk.join(', ') : 'nothing picked'}</p>)}
+              <p><strong>Right answer:</strong> {(p.answer || []).join(', ') || 'none'}</p>
+            </div>
+          )}
+          {(p.kind === 'solve' || p.kind === 'angles') && !p.error && (<>
+            {p.setup && (
+              <p className="vf-tmeta"><strong>How the angles are related:</strong> {p.setup.given.length ? p.setup.given.map((g, i) => `${g}${p.setup.done && !p.setup.revealed && i === p.setup.given.length - 1 ? ' ✓' : ' ✗'}`).join(' → ') : 'not picked yet'}{p.setup.revealed ? ' → shown by the calculator' : ''}</p>
+            )}
+            {(!p.setup || p.setup.given.length > 0) && <Tape p={p} />}
+            {p.special?.length > 0 && <p className="vf-tmeta"><strong>What x disappearing means:</strong> {p.special.join(' → ')}</p>}
+            {p.measure && (
+              <p className="vf-tmeta"><strong>Angle {p.measure.asked}:</strong> {p.measure.given.length ? p.measure.given.map((g) => `${g}°`).join(' → ') : 'not answered'} · right answer {p.measure.answer}{p.measure.missed ? ' (missed)' : ''}</p>
+            )}
+            {p.check && <p className="vf-tmeta ok">{p.check}</p>}
+            {p.blocked?.length > 0 && (
+              <p className="vf-tmeta"><strong>Blocked or locked:</strong> {p.blocked.map((b) => `${b.why} (${b.t}s)`).join(' · ')}</p>
+            )}
+          </>)}
+        </details>
+      ))}
+    </div>
+  ));
+}
+
 /** Teacher page: open students' encrypted .yabc result files. */
 export default function VerifyPage() {
   useEffect(() => { document.title = 'Verify result files · Mr. Cruz · The Lehman YABC'; }, []);
@@ -179,7 +256,8 @@ export default function VerifyPage() {
                                       {r.payload.sections.map((s, i) => <tr key={i}><td>{s.title}</td><td>{s.status != null ? s.status : `${s.earned}${s.possible != null ? ` / ${s.possible}` : ''}`}</td></tr>)}
                                     </tbody></table>
                                   )}
-                                  {r.payload?.extra?.answers && (
+                                  {r.payload?.extra?.work?.length > 0 && <CalcWork work={r.payload.extra.work} />}
+                                  {r.payload?.extra?.answers?.length > 0 && (
                                     <table className="syl-table" style={{ marginTop: 10 }}><thead><tr><th>Checkpoint</th><th>Question</th><th>Answer given</th><th>Tries</th><th>Result</th></tr></thead><tbody>
                                       {r.payload.extra.answers.flatMap((c) => (c.answers || []).map((a) => (
                                         <tr key={`${c.quiz}-${a.q}`}><td>{c.quiz}</td><td>{a.q}</td><td>{Array.isArray(a.given) ? a.given.map((i) => `#${i + 1}`).join(', ') : typeof a.given === 'number' ? `#${a.given + 1}` : String(a.given ?? '')}</td><td>{a.tries}</td><td>{a.status} · {a.earned}</td></tr>

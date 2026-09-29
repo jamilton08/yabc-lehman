@@ -36,7 +36,8 @@ function MdStage({ course, lesson, file, graded, onMaterial }) {
   const kit = typeof window !== 'undefined' ? window.YABC : null;
 
   const onQuiz = useCallback((r) => setQuizzes((q) => ({ ...q, [r.id]: r })), []);
-  const list = useMemo(() => Object.values(quizzes).sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })), [quizzes]);
+  // checkpoints and calculator blocks, in the order they appear in the lesson
+  const list = useMemo(() => Object.values(quizzes).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id, undefined, { numeric: true })), [quizzes]);
   const possible = list.reduce((n, q) => n + q.possible, 0);
   const earned = list.reduce((n, q) => n + q.earned, 0);
   const hasChecks = list.length > 0;
@@ -74,14 +75,17 @@ function MdStage({ course, lesson, file, graded, onMaterial }) {
     if (!kit || !started) return;
     const pct = possible ? Math.round(100 * earned / possible) : 100;
     const open = list.filter((q) => !q.done).length;
-    if (open && !window.confirm(`${open} checkpoint${open === 1 ? '' : 's'} still ha${open === 1 ? 's' : 've'} unanswered questions. Finish anyway? Unanswered questions score 0.`)) return;
+    if (open && !window.confirm(`${open} section${open === 1 ? '' : 's'} still ha${open === 1 ? 's' : 've'} unfinished work. Finish anyway? Anything unfinished scores 0.`)) return;
     setFinished(true);
     try {
       await kit.endScreen(resultRef.current, {
         earned, possible,
         sections: list.map((q) => ({ id: q.id, title: q.title, earned: q.earned, possible: q.possible })),
         tier: possible ? tierFor(pct) : 'Completed',
-        extra: { answers: list.map((q) => ({ quiz: q.id, answers: q.answers })) },
+        extra: {
+          answers: list.filter((q) => q.kind !== 'calc').map((q) => ({ quiz: q.id, answers: q.answers })),
+          ...(list.some((q) => q.kind === 'calc') ? { work: list.filter((q) => q.kind === 'calc').map((q) => ({ calc: q.id, ...q.work })) } : {}),
+        },
       });
       resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch (e) { setErr(e.message); }
@@ -103,7 +107,7 @@ function MdStage({ course, lesson, file, graded, onMaterial }) {
           <div className="finish-zone" id="finish">
             <h2>Finish</h2>
             <p>
-              {hasChecks ? <>Done with every checkpoint? Finish to seal your result — <b>{earned} / {possible}</b> so far — and download the file you submit in Google Classroom.</>
+              {hasChecks ? <>Done with every checkpoint and assigned problem? Finish to seal your result — <b>{earned} / {possible}</b> so far — and download the file you submit in Google Classroom.</>
                 : <>When you are done, finish to get the result file you submit in Google Classroom.</>}
             </p>
             {!finished && <button type="button" className="btn btn-ink btn-pop" disabled={!started} onClick={finish}>{started ? 'Finish and get my result file' : 'Start the lesson first (top of the side panel)'}</button>}

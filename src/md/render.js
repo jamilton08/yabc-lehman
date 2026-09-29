@@ -10,6 +10,8 @@
  *              > body…                          EXAMPLE, TRY, WARNING, STEPS
  *   code       ```python … ``` is highlighted (python, js, html, css, bash, json, sql)
  *   quiz       ```quiz … ``` becomes an interactive checkpoint (see quiz.js)
+ *   calc       ```calc … ``` becomes the step calculator with assigned problems
+ *              (public/lesson-kit/yabc-calc.js has the block format)
  *   embed      ```embed            drops an HTML material into the page
  *              line-explorer.html
  *              height: 480
@@ -20,7 +22,7 @@
  *              the lesson page to that tab.
  *
  * render(md, { base }) → { html, islands, outline }
- *   islands: [{ kind: 'quiz', index, quiz }] — mounted by <Markdown> as React
+ *   islands: [{ kind: 'quiz', index, quiz } | { kind: 'calc', index, calc }] — mounted by <Markdown> as React
  *   outline: [{ id, text, level }] — h2/h3 for the side rail
  */
 import { Marked } from 'marked';
@@ -100,7 +102,7 @@ const callout = {
 };
 
 /* ── the renderer ─────────────────────────────────────────────────── */
-let ctx = null; // { base, islands, outline, ids }
+let ctx = null; // { base, islands, outline, ids, count: { quiz, calc } }
 
 function resolve(u) {
   if (!ctx || !isRelative(u)) return u;
@@ -128,11 +130,13 @@ const renderer = {
   },
   code(tok) {
     const lang = (tok.lang || '').trim().toLowerCase();
-    if (lang === 'quiz') {
+    if (lang === 'quiz' || lang === 'calc') {
       if (!ctx) return '';
       const index = ctx.islands.length;
-      ctx.islands.push({ kind: 'quiz', index, quiz: parseQuiz(tok.text, index) });
-      return `<div class="md-island" data-island="quiz" data-index="${index}"></div>\n`;
+      const n = ctx.count[lang]++; // numbered per kind: quiz-1, quiz-2 … calc-1, calc-2 …
+      if (lang === 'quiz') ctx.islands.push({ kind: 'quiz', index, quiz: { ...parseQuiz(tok.text, n), order: index } });
+      else ctx.islands.push({ kind: 'calc', index, calc: { id: `calc-${n + 1}`, order: index, source: tok.text } });
+      return `<div class="md-island" data-island="${lang}" data-index="${index}"></div>\n`;
     }
     if (lang === 'embed') return embedHtml(tok.text);
     if (lang === 'math') return `<div class="math-block">${tex(tok.text, true)}</div>\n`;
@@ -164,7 +168,7 @@ const marked = new Marked({ gfm: true, breaks: false, extensions: [blockMath, in
 
 /** Render one markdown document. Never throws. */
 export function render(md, { base = '' } = {}) {
-  ctx = { base, islands: [], outline: [], ids: new Set() };
+  ctx = { base, islands: [], outline: [], ids: new Set(), count: { quiz: 0, calc: 0 } };
   let html = '';
   try { html = marked.parse(String(md || '')); }
   catch (e) { html = `<p class="md-error">Could not render this page: ${esc(e.message)}</p>`; }

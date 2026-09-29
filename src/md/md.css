@@ -118,3 +118,6 @@
 .quiz-verdict.bad { color: #a83a2a; font-weight: 600; }
 .quiz-explain { margin: 10px 0 0 40px; padding: 10px 14px; background: var(--paper); border-left: 3px solid var(--ink); font-size: 15px; border-radius: 0 8px 8px 0; }
 .quiz-explain p { margin: 0; }
+
+/* ── step calculator (```calc) — its own styles come with /lesson-kit/yabc-calc.js ── */
+.md .calc-island { margin: 8px 0 8px; }

@@ -22,7 +22,7 @@ export default function Quiz({ quiz, mode = 'graded', enabled = true, locked = f
   }, [state, quiz]);
 
   useEffect(() => {
-    onReport?.({ id: quiz.id, title: quiz.title, earned: totals.earned, possible: quiz.possible, done: totals.done, answers: totals.answers });
+    onReport?.({ id: quiz.id, order: quiz.order, kind: 'quiz', title: quiz.title, earned: totals.earned, possible: quiz.possible, done: totals.done, answers: totals.answers });
   }, [totals]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (id, patch) => setState((s) => ({ ...s, [id]: { ...s[id], ...patch } }));

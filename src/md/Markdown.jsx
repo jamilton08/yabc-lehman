@@ -2,18 +2,21 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { render } from './render.js';
 import Quiz from './Quiz.jsx';
+import Calc from './Calc.jsx';
 import 'katex/dist/katex.min.css';
 import './md.css';
 
 /**
- * Renders a markdown string. Quiz blocks become live <Quiz> components
- * (mounted through portals into the placeholders the renderer left).
+ * Renders a markdown string. Quiz blocks become live <Quiz> components and
+ * calc blocks become the step calculator (<Calc>), both mounted through
+ * portals into the placeholders the renderer left.
  *
  *   source      the markdown text
  *   base        the lesson folder, for relative images / embeds
  *   mode        'graded' | 'practice'   (how quizzes behave)
  *   enabled     graded quizzes stay locked until the student has started
- *   onQuiz      ({ id, title, earned, possible, done, answers }) per checkpoint
+ *   onQuiz      ({ id, order, kind, title, earned, possible, done, answers | work })
+ *               per checkpoint or calculator block
  *   onOutline   ([{ id, text, level }]) once rendered
  *   onMaterial  (file) when the reader clicks a link to a sibling material
  */
@@ -28,7 +31,7 @@ export default function Markdown({ source, base = '', mode = 'practice', enabled
   useLayoutEffect(() => {
     const el = host.current;
     if (!el) return;
-    const found = Array.from(el.querySelectorAll('.md-island[data-island="quiz"]')).map((node) => ({ node, island: out.islands[Number(node.dataset.index)] })).filter((m) => m.island);
+    const found = Array.from(el.querySelectorAll('.md-island[data-island]')).map((node) => ({ node, island: out.islands[Number(node.dataset.index)] })).filter((m) => m.island);
     setMounts(found);
   }, [out]);
 
@@ -54,7 +57,9 @@ export default function Markdown({ source, base = '', mode = 'practice', enabled
     <>
       <div ref={host} className={`md ${className}`} dangerouslySetInnerHTML={{ __html: out.html }} />
       {mounts.map(({ node, island }) => createPortal(
-        <Quiz key={island.quiz.id} quiz={island.quiz} mode={mode} enabled={enabled} locked={locked} onReport={onQuiz} log={log} />, node
+        island.kind === 'calc'
+          ? <Calc key={island.calc.id} calc={island.calc} mode={mode} enabled={enabled} locked={locked} onReport={onQuiz} log={log} />
+          : <Quiz key={island.quiz.id} quiz={island.quiz} mode={mode} enabled={enabled} locked={locked} onReport={onQuiz} log={log} />, node
       ))}
     </>
   );

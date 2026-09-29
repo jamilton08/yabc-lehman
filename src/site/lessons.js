@@ -58,6 +58,21 @@ export const COURSES = [
         blurb: 'Undo what was done to x.',
         lessons: [
           {
+            slug: 'moving-terms-and-coefficients',
+            title: 'Terms that move, coefficients that detach',
+            description: 'Algebra 1, lesson one: read an equation before you solve it. Name the constants, the $x$-terms, and the coefficients (hidden ones too), move terms by doing the opposite to both sides, and detach the coefficient last. You solve the assigned problems on a step calculator that writes down every move you make, and that work goes into your result file.',
+            md: 'lesson.md',
+            kind: 'lesson',
+            graded: true,
+            minutes: 45,
+            added: '2026-09-29',
+            tags: ['Algebra 1', 'algebra', 'terms', 'like terms', 'constant', 'coefficient', 'variable term', 'inverse operations', 'both sides', 'step calculator', 'distribute', 'parentheses', 'Regents'],
+            materials: [
+              { title: 'Step calculator', file: 'calculator.html', kind: 'html', note: 'Type any equation and solve it move by move. Copy or print your work.' },
+              { title: 'Extra practice', file: 'practice.md', kind: 'md', note: 'More problems on the same calculator. Hints are free and nothing is recorded.' },
+            ],
+          },
+          {
             slug: 'solving-linear-equations',
             title: 'Solving linear equations',
             description: 'Every one-variable equation is a locked box, and the key is doing the same thing to both sides. Two-step equations, variables on both sides, distributing, and the two weird cases (no solution, all solutions) — with three checkpoints that count.',
@@ -96,7 +111,28 @@ export const COURSES = [
           },
         ],
       },
-      { id: 'geometry', title: 'Geometry', blurb: 'Shapes, angles, and proof.', lessons: [] },
+      {
+        id: 'geometry',
+        title: 'Geometry',
+        blurb: 'Shapes, angles, and proof.',
+        lessons: [
+          {
+            slug: 'angles-and-crossing-lines',
+            title: 'Angles where lines cross',
+            description: 'Geometry, lesson one. When two lines cross, the angles follow rules that never break: a linear pair adds up to 180°, vertical angles are equal, a corner is 90°, and all the way around is 360°. Drag the lines until you believe it. Then read a figure, pick the rule, let the calculator write the equation, solve for $x$, and find the angle.',
+            md: 'lesson.md',
+            kind: 'lesson',
+            graded: true,
+            minutes: 45,
+            added: '2026-09-29',
+            tags: ['Geometry', 'angles', 'vertical angles', 'linear pair', 'supplementary', 'complementary', 'around a point', 'vertex', 'ray', 'segment', 'naming angles', 'step calculator', 'Regents'],
+            materials: [
+              { title: 'Angle explorer', file: 'angle-explorer.html', kind: 'html', note: 'Drag two crossing lines, a split right angle, or rays around a point. The rules hold every time.' },
+              { title: 'Extra practice', file: 'practice.md', kind: 'md', note: 'More angle problems on the calculator, plus a triangle preview. Nothing is recorded.' },
+            ],
+          },
+        ],
+      },
       { id: 'statistics', title: 'Statistics & probability', blurb: 'What the data says, and how sure you can be.', lessons: [] },
     ],
   },
