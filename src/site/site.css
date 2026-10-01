@@ -390,6 +390,10 @@ a.nav-group-title:hover { color: var(--ink); }
 .vf-tsay b { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--ink); color: #fff; font: 700 10.5px var(--font-display); margin-right: 4px; }
 .vf-tsay small, .vf-tnote small { font-weight: 500; opacity: .8; }
 .vf-tnote.hint { color: #8a5a00; background: #fff3d6; padding: 4px 8px; border-radius: 6px; }
+.vf-tnote.slip { color: #a83a2a; background: #fbe9e6; padding: 4px 8px; border-radius: 6px; }
+.vf-tnote.good { color: var(--finance); background: #eaf5ee; padding: 4px 8px; border-radius: 6px; }
+.vf-te.vf-top { font: 800 10px/1.6 var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--math); align-self: center; }
+.vf-flipmiss { color: #a83a2a; }
 .vf-tape .is-undone { opacity: .45; text-decoration: line-through; }
 .vf-tmeta { font-size: 13.5px; margin: 8px 0 0; }
 .vf-tmeta.ok { color: var(--finance); font-weight: 600; }

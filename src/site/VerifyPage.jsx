@@ -17,28 +17,32 @@ function Tape({ p }) {
   const row = (key, lr, cls = '', mid = '=') => rows.push(
     <Fragment key={key}><div className={`vf-tl ${cls}`}>{lr[0]}</div><div className={`vf-te ${cls}`}>{mid}</div><div className={`vf-tr ${cls}`}>{lr[1]}</div></Fragment>
   );
-  if (p.startSides) row('start', p.startSides);
-  let n = 0, restore = null;
+  // inequalities (calculator v1.1) carry the sign: startRel, and fromRel/rel on each move; equations have none → '='
+  if (p.startSides) row('start', p.startSides, '', p.startRel || '=');
+  let n = 0, restore = null, restoreRel = '=';
+  const back = (key) => { rows.push(<div key={`b${key}`} className="vf-tnote">↩ back to</div>); row(`br${key}`, restore, '', restoreRel); restore = null; };
   (p.steps || []).forEach((s, i) => {
-    if (s.kind === 'hint' || s.kind === 'note') {
-      if (restore) { rows.push(<div key={`b${i}`} className="vf-tnote">↩ back to</div>); row(`br${i}`, restore); restore = null; }
-      rows.push(<div key={i} className={`vf-tnote${s.kind === 'hint' ? ' hint' : ''}`}>{s.kind === 'hint' ? 'Hint: ' : ''}{s.text} <small>{s.t}s</small></div>);
+    if (s.kind === 'hint' || s.kind === 'note' || !s.to) {
+      if (restore) back(i);
+      const cls = s.kind === 'hint' ? ' hint' : s.tag === 'slip' ? ' slip' : s.tag === 'read' || s.tag === 'graph' ? ' good' : '';
+      rows.push(<div key={i} className={`vf-tnote${cls}`}>{s.kind === 'hint' ? 'Hint: ' : s.tag === 'slip' ? '✗ ' : s.tag === 'read' || s.tag === 'graph' ? '✓ ' : ''}{s.text} <small>{s.t}s</small></div>);
       return;
     }
-    if (!s.undone && restore) { rows.push(<div key={`b${i}`} className="vf-tnote">↩ back to</div>); row(`br${i}`, restore); restore = null; }
+    if (!s.undone && restore) back(i);
     if (!s.undone) n++;
     const u = s.undone ? 'is-undone' : '';
     rows.push(
       <div key={`s${i}`} className={`vf-tsay ${u}`}>
         <b>{s.undone ? '×' : n}</b> {s.say}{s.undone ? ' — undone' : ''}
+        {s.flip && !s.flip.right && <span className="vf-flipmiss"> · said “{s.flip.given[0]}” first</span>}
         <small> · {s.via === 'keys' ? 'keyed' : s.via === 'button' ? 'button' : 'tapped'}{s.at ? ` ${s.at}` : ''} · {s.t}s</small>
       </div>
     );
-    if (s.op) row(`o${i}`, [s.op, s.op], `vf-top ${u}`, '');
-    row(`t${i}`, s.to, u);
-    if (s.undone) restore = s.from;
+    if (s.op) row(`o${i}`, [s.op, s.op], `vf-top ${u}`, s.flip?.flips ? 'flip' : '');
+    row(`t${i}`, s.to, u, s.rel || '=');
+    if (s.undone) { restore = s.from; restoreRel = s.fromRel || '='; }
   });
-  if (restore) { rows.push(<div key="bend" className="vf-tnote">↩ back to</div>); row('brend', restore); }
+  if (restore) back('end');
   return <div className="vf-tape">{rows}</div>;
 }
 
@@ -71,6 +75,9 @@ function CalcWork({ work }) {
             )}
             {(!p.setup || p.setup.given.length > 0) && <Tape p={p} />}
             {p.special?.length > 0 && <p className="vf-tmeta"><strong>What x disappearing means:</strong> {p.special.join(' → ')}</p>}
+            {p.read && <p className="vf-tmeta"><strong>Read from x’s side:</strong> {p.read.from} → {p.read.given.join(' → ')}{p.read.right ? ' ✓' : ''}</p>}
+            {p.graph && <p className="vf-tmeta"><strong>Graph:</strong> {p.graph.given.length ? p.graph.given.join(' → ') : 'not checked'} · right answer {p.graph.answer}{p.graph.missed ? ' (missed)' : ''}</p>}
+            {p.slips?.some((x) => x.kind === 'flip') && <p className="vf-tmeta"><strong>Keep or flip:</strong> {p.slips.filter((x) => x.kind === 'flip').map((x) => `${x.given === 'flip' ? 'flipped' : 'kept'} on ${x.op} (wrong, ${x.t}s)`).join(' · ')}</p>}
             {p.measure && (
               <p className="vf-tmeta"><strong>Angle {p.measure.asked}:</strong> {p.measure.given.length ? p.measure.given.map((g) => `${g}°`).join(' → ') : 'not answered'} · right answer {p.measure.answer}{p.measure.missed ? ' (missed)' : ''}</p>
             )}

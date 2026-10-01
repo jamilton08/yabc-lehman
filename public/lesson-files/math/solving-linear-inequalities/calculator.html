@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Step calculator — inequalities — Mr. Cruz · The Lehman YABC</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" />
+<link rel="stylesheet" href="/lesson-kit/lesson.css" />
+<script src="/lesson-kit/yabc-calc.js"></script>
+<style>
+  .wrap { max-width: 900px; }
+  .tips { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 22px 0 0; }
+  .tips .card { margin: 0; padding: 14px 16px; font-size: 15px; }
+  .tips h3 { margin: 0 0 6px; font-size: 15px; }
+  .tips p { margin: 0; }
+  .print-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  @media print { .kicker, .lede, .tips, .print-row { display: none; } }
+</style>
+</head>
+<body class="math">
+<div class="wrap">
+  <p class="kicker">Math · Inequalities · Tool</p>
+  <h1>Step calculator</h1>
+  <p class="lede">Type any linear equation or inequality. Use <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code> or <code>&gt;=</code> for the sign. You make every move, the calculator does the arithmetic, and your work gets written down step by step so you can copy it into your notebook.</p>
+
+  <div id="calc"></div>
+  <div class="print-row"><button class="btn sm" type="button" onclick="window.print()">Print my work</button></div>
+
+  <div class="tips">
+    <div class="card"><h3>Same moves</h3><p>Terms move, coefficients detach, the same as with equations. Tap a term to see what you can do with it.</p></div>
+    <div class="card"><h3>Keep or flip?</h3><p>Every × or ÷ asks you about the sign. Look only at the number you multiply or divide <b>by</b>. If it's negative, the sign flips.</p></div>
+    <div class="card"><h3>Then graph it</h3><p>Use an open circle for &lt; or &gt; and a closed circle for ≤ or ≥. Shade toward the numbers that work, and test one if you're not sure.</p></div>
+  </div>
+</div>
+<script>
+  YABCCalc.mount('#calc', {
+    mode: 'free',
+    title: 'Any equation or inequality',
+    placeholder: 'Type an inequality, like 3 - 2x >= 11',
+    blank: 'Type any linear equation or inequality above, or pick one to try. You make the moves, and the calculator does the arithmetic and writes down your work.',
+    examples: ['3x - 4 <= 11', '-2x + 5 > 13', 'x/3 - 1 >= 2', '5 - x < 9', '2x + 5 < 5x - 13', '4(x - 1) >= 4x + 2'],
+  });
+</script>
+</body>
+</html>

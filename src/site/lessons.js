@@ -88,6 +88,22 @@ export const COURSES = [
               { title: 'Regents reference sheet', href: 'https://www.nysed.gov/state-assessment/high-school-regents-examinations', kind: 'link', note: 'The formula sheet you get on the exam.' },
             ],
           },
+          {
+            slug: 'solving-linear-inequalities',
+            title: 'Solving linear inequalities',
+            description: 'Algebra 1. Same moves as equations, plus one new rule: multiply or divide by a negative and the sign flips. Read $<$, $>$, $\\le$, $\\ge$ from words, test values, and graph the answer on a number line. On the step calculator you decide "keep or flip?" on every multiply or divide, read answers like $6 < x$ from $x$\'s side, and graph each answer. It ends with Regents-style word problems.',
+            md: 'lesson.md',
+            kind: 'lesson',
+            graded: true,
+            minutes: 45,
+            added: '2026-10-01',
+            tags: ['Algebra 1', 'algebra', 'inequalities', 'inequality', 'less than', 'greater than', 'at least', 'at most', 'flip the sign', 'negative', 'number line', 'open circle', 'closed circle', 'graphing', 'test point', 'word problems', 'step calculator', 'Regents'],
+            materials: [
+              { title: 'Number line explorer', file: 'number-line.html', kind: 'html', note: 'Drag a test number along any inequality, and see why multiplying by a negative turns the order around.' },
+              { title: 'Step calculator', file: 'calculator.html', kind: 'html', note: 'Type any equation or inequality and solve it move by move. Copy or print your work.' },
+              { title: 'Extra practice', file: 'practice.md', kind: 'md', note: 'More problems on the same calculator, including stories and when-x-disappears. Nothing is recorded.' },
+            ],
+          },
         ],
       },
       {

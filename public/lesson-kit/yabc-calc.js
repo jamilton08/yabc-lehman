@@ -1,8 +1,8 @@
 /* ============================================================================
-   YABC STEP CALCULATOR  v1.0  —  Mr. Cruz · The Lehman YABC
-   A calculator for solving linear equations one move at a time. The student
-   decides every move; the calculator does the arithmetic and writes the work
-   down on a tape, the way it would look on paper:
+   YABC STEP CALCULATOR  v1.1  —  Mr. Cruz · The Lehman YABC
+   A calculator for solving linear equations (and inequalities) one move at a
+   time. The student decides every move; the calculator does the arithmetic
+   and writes the work down on a tape, the way it would look on paper:
 
          2x + 3 = 11
             −3    −3        subtract 3 from both sides
@@ -20,6 +20,17 @@
      Combine / Distribute   → tidy one side (like terms, parentheses)
    Terms inside parentheses are locked until they are distributed.
 
+   Inequalities (v1.1) — write <, >, <=, >= (or ≤, ≥) instead of =
+     • Every × or ÷ asks "keep the sign or flip it?" — the student decides.
+       Only a negative multiplier/divisor flips it. A wrong call is explained
+       with numbers, goes on the tape, and caps that problem at half credit.
+     • x ends up on the right (6 < x)? The student reads it from x's side
+       (x > 6) before it counts as solved.
+     • Then they graph it on a number line: open or closed circle, shade left
+       or right. Turn that off with  graph: off  in the block.
+     • x disappears (4 > −3, 5 < 1): same "every number / no number" choice.
+   Equations behave exactly as in v1.0.
+
    Where it runs
      • Markdown lessons:  a ```calc block (the site loads this file on its own)
      • HTML lessons:      <script src="/lesson-kit/yabc-calc.js"></script>
@@ -33,6 +44,7 @@
        points: 2           per problem (default 2)
        slack: 1            moves over par that still earn full points (default 1)
        hints: on           on | off
+       graph: on           on | off — graph inequality answers on a number line
 
        1. 2x + 3 = 11
        2. [3 pts] 7x - 4 = 3x + 12
@@ -40,6 +52,8 @@
        4. spot coefficients: x/4 + 2 = 3x         constants | x-terms |
        5. spot movable: 3(x + 4) - 5 = 2x         coefficients | movable
           > Optional note, shown once the problem is done.
+       6. -3x + 2 >= 14                          an inequality
+          ? A question or story, shown above the problem (and in the result).
 
    Scoring (graded mode)
      solve:  solved with no hint, in par + slack moves or fewer → full points;
@@ -48,6 +62,8 @@
      spot:   right on the first check → full; second check → half.
      x disappears (no solution / every number): the student says which;
              first try full, second try half.
+     inequalities: a wrong keep/flip call, a misread answer, or a second
+             try on the graph → half. (Hints and extra moves count as above.)
 
    API (window.YABCCalc)
      mount(el, opts) → { update({ enabled, locked }), report(), destroy() }
@@ -57,7 +73,7 @@
    ========================================================================== */
 (function () {
   'use strict';
-  var VERSION = '1.0';
+  var VERSION = '1.1';
   var MINUS = '−';
 
   function CalcError(msg) { this.message = msg; this.name = 'CalcError'; }
@@ -97,6 +113,27 @@
   const otherSide = (s) => (s === 'L' ? 'R' : 'L');
   const sideName = (s) => (s === 'L' ? 'left' : 'right');
 
+  /* ── the sign between the sides: = < > ≤ ≥ ──────────────────────── */
+  const FLIP = { '=': '=', '<': '>', '>': '<', '≤': '≥', '≥': '≤' };
+  const REL_WORD = { '=': 'equals', '<': 'is less than', '>': 'is greater than', '≤': 'is less than or equal to', '≥': 'is greater than or equal to' };
+  const relOf = (st) => (st && st.rel) || '=';
+  const isIneq = (st) => relOf(st) !== '=';
+  const fcmp = (a, b) => Math.sign(a.n * b.d - b.n * a.d);
+  /** Is "a rel b" true? */
+  function holds(a, b, rel) {
+    const c = fcmp(a, b);
+    if (rel === '<') return c < 0;
+    if (rel === '>') return c > 0;
+    if (rel === '≤') return c <= 0;
+    if (rel === '≥') return c >= 0;
+    return c === 0;
+  }
+  const closedRel = (rel) => rel === '≤' || rel === '≥';
+  /** "x < 4" → shade left; "x > 4" → shade right (rel read from x's side). */
+  const shadeOf = (rel) => (rel === '<' || rel === '≤' ? 'left' : 'right');
+  /** a plain-text minus sign in a typed question line: "x - 4" → "x − 4", "-9" → "−9" */
+  const prettyMinus = (s) => String(s || '').replace(/(^|[\s(=,:])-(?=[\d.a-zA-Z(])/g, '$1' + MINUS).replace(/ - /g, ' ' + MINUS + ' ');
+
   /* ── parsing ─────────────────────────────────────────────────────────
      A side is a list of terms:
        { t: 'k', c }                 a constant
@@ -114,7 +151,8 @@
   function tokenize(src) {
     const s = String(src == null ? '' : src)
       .replace(/[−‒–—]/g, '-').replace(/[×·∙⋅*]/g, '*').replace(/÷/g, '/')
-      .replace(/[\[{]/g, '(').replace(/[\]}]/g, ')');
+      .replace(/[\[{]/g, '(').replace(/[\]}]/g, ')')
+      .replace(/<=|=<|≦|⩽/g, '≤').replace(/>=|=>|≧|⩾/g, '≥');
     const out = [];
     let i = 0;
     while (i < s.length) {
@@ -129,7 +167,8 @@
         i = j; continue;
       }
       if (/[a-zA-Z]/.test(c)) { out.push({ k: 'var', v: c }); i++; continue; }
-      if ('+-*/()='.indexOf(c) >= 0) { out.push({ k: c }); i++; continue; }
+      if ('=<>≤≥'.indexOf(c) >= 0) { out.push({ k: 'rel', v: c }); i++; continue; }
+      if ('+-*/()'.indexOf(c) >= 0) { out.push({ k: c }); i++; continue; }
       if (c === '^') fail('No exponents here — these are linear equations.');
       fail('The calculator does not know “' + c + '”.');
     }
@@ -138,15 +177,18 @@
 
   function parseEquation(src) {
     const toks = tokenize(src);
-    const eqs = toks.filter((t) => t.k === '=').length;
-    if (eqs !== 1) fail(eqs ? 'Use just one = sign.' : 'An equation needs an = sign.');
+    const rels = toks.filter((t) => t.k === 'rel');
+    if (rels.length !== 1) {
+      if (!rels.length) fail('An equation needs an = sign (an inequality needs <, >, ≤ or ≥).');
+      fail(rels.every((t) => t.v === '=') ? 'Use just one = sign.' : 'One sign at a time — this has ' + rels.map((t) => t.v).join(' and ') + '. Split it into two problems.');
+    }
     const letters = Array.from(new Set(toks.filter((t) => t.k === 'var').map((t) => t.v)));
     if (letters.length > 1) fail('Use one letter for the unknown — this has ' + letters.join(' and ') + '.');
     const v = letters[0] || 'x';
     let p = 0;
     const peek = () => toks[p];
     const next = () => toks[p++];
-    const ends = (t) => !t || t.k === '=' || t.k === ')';
+    const ends = (t) => !t || t.k === 'rel' || t.k === ')';
 
     function expr(depth) {
       const terms = [];
@@ -212,11 +254,11 @@
     }
 
     const L = expr(0);
-    if (!peek() || peek().k !== '=') fail(peek() && peek().k === ')' ? 'There is a “)” with no “(”.' : 'The calculator could not find the = sign.');
-    next();
+    if (!peek() || peek().k !== 'rel') fail(peek() && peek().k === ')' ? 'There is a “)” with no “(”.' : 'The calculator could not find the = sign.');
+    const rel = next().v;
     const R = expr(0);
-    if (peek()) fail(peek().k === ')' ? 'There is a “)” with no “(”.' : 'The calculator could not read the end of that equation.');
-    return { v: v, st: { L: L, R: R } };
+    if (peek()) fail(peek().k === ')' ? 'There is a “)” with no “(”.' : 'The calculator could not read the end of that ' + (rel === '=' ? 'equation.' : 'inequality.'));
+    return { v: v, st: { L: L, R: R, rel: rel } };
   }
 
   /* ── what's on a side ────────────────────────────────────────────── */
@@ -270,38 +312,42 @@
     return res;
   }
 
-  /** + − × ÷ the same thing on both sides. */
+  /** + − × ÷ the same thing on both sides. × or ÷ by a negative turns an inequality's sign around. */
   function applyOp(st, op, val, isX, v) {
     v = v || 'x';
+    const rel = relOf(st), what = rel === '=' ? 'equation' : 'inequality';
     if (op === '+' || op === '-') {
       if (isZero(val)) fail((op === '+' ? 'Adding' : 'Subtracting') + ' 0 changes nothing.');
       const term = { t: isX ? 'x' : 'k', c: op === '-' ? fneg(val) : val };
-      return { L: mergeInto(st.L, term), R: mergeInto(st.R, term) };
+      return { L: mergeInto(st.L, term), R: mergeInto(st.R, term), rel: rel };
     }
-    if (isX) fail('You can’t ' + (op === '*' ? 'multiply' : 'divide') + ' both sides by ' + v + ' here — the equation would stop being linear. Use a number.');
-    if (isZero(val)) fail(op === '*' ? 'Multiplying both sides by 0 turns everything into 0 = 0 and wipes out the equation. Not allowed.' : 'You can’t divide by zero.');
+    if (isX) fail('You can’t ' + (op === '*' ? 'multiply' : 'divide') + ' both sides by ' + v + ' here — the ' + what + ' would stop being linear. Use a number.');
+    if (isZero(val)) fail(op === '*' ? 'Multiplying both sides by 0 turns everything into 0 ' + rel + ' 0 and wipes out the ' + what + '. Not allowed.' : 'You can’t divide by zero.');
     if (op === '*' && isOne(val)) fail('Multiplying by 1 changes nothing.');
     if (op === '/' && isOne(val)) fail('Dividing by 1 changes nothing.');
     const f = op === '*' ? val : fdiv(ONE, val);
-    return { L: scaleSide(st.L, f), R: scaleSide(st.R, f) };
+    return { L: scaleSide(st.L, f), R: scaleSide(st.R, f), rel: f.n < 0 ? FLIP[rel] : rel };
   }
   function applyCombine(st, s, only) {
-    const out = { L: s && s !== 'L' ? clone(st.L) : combineSide(st.L, only), R: s && s !== 'R' ? clone(st.R) : combineSide(st.R, only) };
-    if (same(out, st)) fail('There is nothing to combine — no two like terms sit on the same side.');
+    const out = { L: s && s !== 'L' ? clone(st.L) : combineSide(st.L, only), R: s && s !== 'R' ? clone(st.R) : combineSide(st.R, only), rel: relOf(st) };
+    if (same(out.L, st.L) && same(out.R, st.R)) fail('There is nothing to combine — no two like terms sit on the same side.');
     return out;
   }
   function applyDistribute(st, s, i) {
     if (!hasGroup(st)) fail('There are no parentheses to distribute.');
-    return { L: s && s !== 'L' ? clone(st.L) : distributeSide(st.L, s ? i : null), R: s && s !== 'R' ? clone(st.R) : distributeSide(st.R, s ? i : null) };
+    return { L: s && s !== 'L' ? clone(st.L) : distributeSide(st.L, s ? i : null), R: s && s !== 'R' ? clone(st.R) : distributeSide(st.R, s ? i : null), rel: relOf(st) };
   }
 
-  /** Is it over? { kind:'solved', value, flipped } | { kind:'special', truth } | null */
+  /** Is it over?
+   *  { kind:'solved', value, flipped, rel }  — rel is read from x's side (6 < x → '>')
+   *  { kind:'special', truth } | null */
   function outcome(st) {
-    if (!hasX(st.L) && !hasX(st.R)) return { kind: 'special', truth: feq(evalSide(st.L, ZERO), evalSide(st.R, ZERO)) };
+    const rel = relOf(st);
+    if (!hasX(st.L) && !hasX(st.R)) return { kind: 'special', truth: holds(evalSide(st.L, ZERO), evalSide(st.R, ZERO), rel) };
     const alone = (side) => side.length === 1 && side[0].t === 'x' && isOne(side[0].c);
     const plain = (side) => side.length === 0 || (side.length === 1 && side[0].t === 'k');
-    if (alone(st.L) && plain(st.R)) return { kind: 'solved', value: st.R.length ? st.R[0].c : ZERO, flipped: false };
-    if (alone(st.R) && plain(st.L)) return { kind: 'solved', value: st.L.length ? st.L[0].c : ZERO, flipped: true };
+    if (alone(st.L) && plain(st.R)) return { kind: 'solved', value: st.R.length ? st.R[0].c : ZERO, flipped: false, rel: rel };
+    if (alone(st.R) && plain(st.L)) return { kind: 'solved', value: st.L.length ? st.L[0].c : ZERO, flipped: true, rel: FLIP[rel] };
     return null;
   }
 
@@ -368,7 +414,8 @@
     return first ? (neg ? MINUS : '') + body : (neg ? ' ' + MINUS + ' ' : ' + ') + body;
   }
   const sideText = (terms, v) => (terms.length ? terms.map((t, i) => termText(t, i === 0, v)).join('') : '0');
-  const eqText = (st, v) => sideText(st.L, v) + ' = ' + sideText(st.R, v);
+  const eqText = (st, v) => sideText(st.L, v) + ' ' + relOf(st) + ' ' + sideText(st.R, v);
+  const ansText = (rel, value, v) => v + ' ' + rel + ' ' + ftext(value);
   /** a single term with its sign always shown: +3, −2x, +3(x + 4) */
   const termLabel = (t, v) => { const s = termText(t, false, v).trim(); return s[0] === '+' ? '+' + s.slice(2) : MINUS + s.slice(2); };
   const opSym = { '+': '+', '-': MINUS, '*': '×', '/': '÷' };
@@ -422,6 +469,36 @@
     return val.n < 0 ? '(' + MINUS + body + ')' : body;
   }
   const opHtml = (op, val, isX, v) => '<span class="yc-opsym">' + opSym[op] + '</span>' + valHtml(val, isX, v);
+  const relHtml = (rel) => '<span class="yc-rel">' + esc(rel) + '</span>';
+
+  /** A number line for an inequality answer.
+   *  circle: 'open' | 'closed' | null, side: 'left' | 'right' | null, tone: 'acc' | 'ok' | 'bad' */
+  function nlHtml(value, circle, side, tone, label, narrow) {
+    const W = narrow ? 360 : 600, Y = 40, pad = narrow ? 24 : 30, b = fnum(value), whole = isInt(value), span = narrow ? 3 : 5;
+    const lo = whole ? b - span : Math.floor(b) - span + 1, hi = whole ? b + span : Math.ceil(b) + span - 1;
+    const X = (u) => pad + ((u - lo) / (hi - lo)) * (W - 2 * pad);
+    const col = tone === 'ok' ? 'var(--yc-ok)' : tone === 'bad' ? 'var(--yc-bad)' : 'var(--yc-acc)';
+    const num = (n) => (n < 0 ? MINUS : '') + Math.abs(n);
+    let s = '<svg class="yc-nl" viewBox="0 0 ' + W + ' 76" role="img" aria-label="' + esc(label || 'number line') + '">';
+    s += '<line x1="12" y1="' + Y + '" x2="' + (W - 12) + '" y2="' + Y + '" style="stroke:var(--yc-ink);stroke-width:2"/>';
+    s += '<polygon points="4,' + Y + ' 15,' + (Y - 6) + ' 15,' + (Y + 6) + '" style="fill:var(--yc-ink)"/><polygon points="' + (W - 4) + ',' + Y + ' ' + (W - 15) + ',' + (Y - 6) + ' ' + (W - 15) + ',' + (Y + 6) + '" style="fill:var(--yc-ink)"/>';
+    for (let i = Math.ceil(lo); i <= hi; i++) {
+      const x = X(i).toFixed(1);
+      s += '<line x1="' + x + '" y1="' + (Y - 7) + '" x2="' + x + '" y2="' + (Y + 7) + '" style="stroke:var(--yc-ink);stroke-width:1.5"/>';
+      s += '<text x="' + x + '" y="' + (Y + 27) + '" text-anchor="middle"' + (whole && i === b ? ' class="b"' : '') + '>' + num(i) + '</text>';
+    }
+    const bx = X(b);
+    if (!whole) s += '<line x1="' + bx.toFixed(1) + '" y1="' + (Y - 7) + '" x2="' + bx.toFixed(1) + '" y2="' + (Y + 7) + '" style="stroke:var(--yc-ink);stroke-width:1.5"/><text x="' + bx.toFixed(1) + '" y="' + (Y - 16) + '" text-anchor="middle" class="b">' + esc(ftext(value)) + '</text>';
+    if (side) {
+      const end = side === 'left' ? 16 : W - 16;
+      s += '<line x1="' + bx.toFixed(1) + '" y1="' + Y + '" x2="' + end + '" y2="' + Y + '" style="stroke:' + col + ';stroke-width:7"/>';
+      s += side === 'left' ? '<polygon points="2,' + Y + ' 18,' + (Y - 10) + ' 18,' + (Y + 10) + '" style="fill:' + col + '"/>' : '<polygon points="' + (W - 2) + ',' + Y + ' ' + (W - 18) + ',' + (Y - 10) + ' ' + (W - 18) + ',' + (Y + 10) + '" style="fill:' + col + '"/>';
+    }
+    if (circle) s += '<circle cx="' + bx.toFixed(1) + '" cy="' + Y + '" r="8.5" style="fill:' + (circle === 'closed' ? col : '#fff') + ';stroke:' + col + ';stroke-width:3"/>';
+    else s += '<circle cx="' + bx.toFixed(1) + '" cy="' + Y + '" r="8.5" style="fill:#fff;stroke:var(--yc-mute);stroke-width:2;stroke-dasharray:3 3"/>';
+    return s + '</svg>';
+  }
+  const graphWords = (g) => (g.circle ? g.circle + ' circle' : 'no circle') + ', ' + (g.side ? 'shaded ' + g.side : 'no shading');
 
   /* ── the block text ──────────────────────────────────────────────── */
   const SPOTS = {
@@ -431,25 +508,27 @@
     movable: 'movable', moveable: 'movable', move: 'movable', moves: 'movable',
   };
   function parseBlock(text) {
-    const block = { title: '', moves: 'both', points: 2, slack: 1, hints: true, problems: [] };
+    const block = { title: '', moves: 'both', points: 2, slack: 1, hints: true, graph: true, problems: [] };
     let cur = null;
     String(text || '').replace(/\r/g, '').split('\n').forEach((raw) => {
       const t = raw.trim();
       if (!t) return;
       let m;
-      if (!block.problems.length && (m = /^(title|moves|points|slack|hints)\s*:\s*(.*)$/i.exec(t))) {
+      if (!block.problems.length && (m = /^(title|moves|points|slack|hints|graph)\s*:\s*(.*)$/i.exec(t))) {
         const k = m[1].toLowerCase(), val = m[2].trim();
         if (k === 'title') block.title = val;
         else if (k === 'moves') block.moves = /^tap/i.test(val) ? 'tap' : /^(type|key)/i.test(val) ? 'type' : 'both';
         else if (k === 'points') block.points = Number(val) > 0 ? Number(val) : 2;
         else if (k === 'slack') block.slack = Number(val) >= 0 ? Number(val) : 1;
+        else if (k === 'graph') block.graph = !/^(off|no|false|0)$/i.test(val);
         else block.hints = !/^(off|no|false|0)$/i.test(val);
         return;
       }
       if ((m = /^>\s?(.*)$/.exec(t))) { if (cur) cur.note = (cur.note ? cur.note + ' ' : '') + m[1]; return; }
-      if ((m = /^(?:\d+[.)]|[-*])\s+(.*)$/.exec(t)) || /=/.test(t)) {
+      if ((m = /^\?\s?(.*)$/.exec(t))) { if (cur) cur.ask = (cur.ask ? cur.ask + ' ' : '') + m[1]; return; }
+      if ((m = /^(?:\d+[.)]|[-*])\s+(.*)$/.exec(t)) || /[=<>≤≥]/.test(t)) {
         let body = m ? m[1] : t;
-        const spec = { kind: 'solve', spot: null, eq: '', points: null, note: '' };
+        const spec = { kind: 'solve', spot: null, eq: '', points: null, note: '', ask: '' };
         const pm = /^\[(\d+(?:\.\d+)?)\s*pts?\]\s*/i.exec(body);
         if (pm) { spec.points = Number(pm[1]); body = body.slice(pm[0].length); }
         const sm = /^spot\s+([a-z-]+(?:\s+terms)?)\s*:\s*(.*)$/i.exec(body);
@@ -541,6 +620,7 @@
     '.yc-rows .is-undone{opacity:.42;text-decoration:line-through;text-decoration-thickness:2px}.yc-say.is-undone b{background:var(--yc-mute)}',
     '.yc-note{grid-column:1/-1;font:600 12.5px/1.35 var(--font-body,Inter,sans-serif);margin:8px 0 2px;padding:5px 9px;border-radius:6px;background:var(--yc-paper);color:var(--yc-mute)}',
     '.yc-note.hint{background:#fff3d6;color:var(--yc-warn)}.yc-note.back{background:none;padding:0 0 0 2px}',
+    '.yc-note.slip{background:#fbe9e6;color:var(--yc-bad)}.yc-note.good{background:#eaf5ee;color:var(--yc-ok)}',
     '.yc-rows .yc-win{color:var(--yc-ok);font-weight:800}.yc-rows .yc-win .yc-v{color:var(--yc-ok)}.yc-rows .yc-l.yc-win,.yc-rows .yc-r.yc-win{border-bottom:3px double var(--yc-ok)}',
     '.yc .yc-check{grid-column:1/-1;margin-top:8px;font:600 13.5px/1.4 var(--font-body,Inter,sans-serif);color:var(--yc-ok)}',
     '.yc .yc-empty{grid-column:1/-1;margin-bottom:0;font:500 13.5px var(--font-body,Inter,sans-serif);color:var(--yc-mute);margin-top:6px}',
@@ -548,6 +628,25 @@
     '.yc-done.is-half{border-color:#c98a14;background:#fff6e0}.yc-done.is-wrong{border-color:var(--yc-bad);background:#fbe9e6}',
     '.yc-done strong{font:800 18px var(--font-display,Archivo,sans-serif)}.yc-done .grow{flex:1}.yc-done .why{flex-basis:100%;font-size:14px;color:var(--yc-mute)}',
     '.yc-special{margin:8px 18px 0;padding:12px 14px;border:1.5px solid var(--yc-ink);border-radius:10px;background:var(--yc-paper)}',
+    '.yc-special .yc-sub{margin-top:6px;font-size:14px;color:var(--yc-mute)}',
+    '.yc-special.is-flip{border-color:var(--yc-acc);box-shadow:inset 6px 0 0 var(--yc-acc);padding-left:20px}',
+    '.yc .yc-ask{margin:0 18px 12px;padding:10px 14px;border-left:4px solid var(--yc-ink);background:var(--yc-paper);border-radius:0 10px 10px 0;font-size:15.5px;line-height:1.5}',
+    '.yc-rel{font-weight:800}',
+    '.yc-e .yc-flip{display:inline-block;font:800 10.5px/1 var(--font-display,Archivo,sans-serif);letter-spacing:.06em;text-transform:uppercase;color:#fff;background:var(--yc-acc);padding:3px 5px;border-radius:4px;vertical-align:middle}',
+    '.yc-e.yc-keep{font:600 10.5px var(--font-body,Inter,sans-serif);color:var(--yc-mute);align-self:center}',
+    '.yc-graph{margin:10px 18px 0;padding:12px 14px 14px;border:1.5px solid var(--yc-ink);border-radius:10px;background:#fff}',
+    '.yc-graph.is-ok{border-color:var(--yc-ok);background:#f3faf5}.yc-graph.is-bad{border-color:var(--yc-bad)}',
+    '.yc-graph>p{font-size:15px}',
+    '.yc-nl{display:block;width:100%;height:auto;margin:6px 0 4px;overflow:visible}',
+    '.yc-nl text{font:600 13px var(--font-mono,ui-monospace,Menlo,monospace);fill:var(--yc-mute)}.yc-nl text.b{font:800 15px var(--font-display,Archivo,sans-serif);fill:var(--yc-ink)}',
+    '.yc-gctl{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin-top:6px}',
+    '.yc-gctl .grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}',
+    '.yc-gctl .lbl{font:700 11.5px var(--font-display,Archivo,sans-serif);letter-spacing:.1em;text-transform:uppercase;color:var(--yc-mute);margin-right:2px}',
+    '.yc-gb{font:700 14px var(--font-display,Archivo,sans-serif)!important;padding:7px 12px;border-radius:8px;border:1.5px solid var(--yc-ink);background:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:6px}',
+    '.yc-gb:hover:not(:disabled){background:var(--yc-paper)}.yc-gb.is-on{background:var(--yc-ink);color:var(--yc-paper)!important}.yc-gb.is-on:hover:not(:disabled){background:#333}.yc-gb:disabled{opacity:.45;cursor:not-allowed}',
+    '.yc-gb .dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:2.5px solid currentColor}.yc-gb .dot.f{background:currentColor}',
+    '.yc-gcheck{margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}',
+    '.yc-done .yc-nl{flex-basis:100%;max-width:520px;margin:2px 0 0}',
     '.yc-spot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 18px 18px}',
     '.yc-spot .yc-note{margin:0;flex-basis:100%}',
     '.yc .yc-err{margin:12px 18px 18px;padding:10px 14px;border:1.5px dashed var(--yc-bad);border-radius:10px;color:var(--yc-bad);font-size:14.5px}',
@@ -576,9 +675,10 @@
     const cfg = Object.assign({ mode: 'graded', enabled: true, locked: false, order: 0, id: 'calc-1' }, opts || {});
     const free = cfg.mode === 'free', graded = cfg.mode === 'graded';
     const block = cfg.source != null ? parseBlock(cfg.source) : {
-      title: cfg.title || '', moves: cfg.moves || 'both', points: cfg.points || 2, slack: cfg.slack == null ? 1 : cfg.slack, hints: cfg.hints !== false,
+      title: cfg.title || '', moves: cfg.moves || 'both', points: cfg.points || 2, slack: cfg.slack == null ? 1 : cfg.slack, hints: cfg.hints !== false, graph: cfg.graph !== false,
       problems: (cfg.problems || []).map((p) => (typeof p === 'string' ? parseBlock('1. ' + p).problems[0] : p)).filter(Boolean),
     };
+    const EXAMPLES = cfg.examples || ['2x + 3 = 11', '7x - 4 = 3x + 12', 'x/4 + 2 = 9', '3(x + 4) = 21', '5 - 2x = 3x - 10', '2x + 5 = 2x + 9'];
     if (!block.title) block.title = free ? 'Step calculator' : 'Solve it step by step';
     const tapMoves = block.moves !== 'type', padShown = block.moves !== 'tap';
 
@@ -587,7 +687,8 @@
     function blank() { return { op: null, neg: false, num: '', den: null, x: false }; }
 
     function makeProblem(spec, i) {
-      const P = { n: i + 1, spec: spec, v: 'x', steps: [], hints: 0, undos: 0, status: 'open', earned: 0, t0: null, par: 0, answer: null, check: null, pending: false, sp: { tries: 0, given: [] }, spot: null, error: null, blocked: [] };
+      const P = { n: i + 1, spec: spec, v: 'x', steps: [], hints: 0, undos: 0, status: 'open', earned: 0, t0: null, par: 0, answer: null, check: null, pending: false, sp: { tries: 0, given: [] }, spot: null, error: null, blocked: [],
+        slips: [], flipQ: null, reading: null, graphing: null, graph: null, final: null };
       try {
         if (!spec.eq) fail('No equation was given.');
         const parsed = parseEquation(spec.eq);
@@ -609,6 +710,12 @@
     const isMove = (s) => s.kind === 'op' || s.kind === 'combine' || s.kind === 'distribute';
     const movesOf = (P) => P.steps.filter((s) => isMove(s) && !s.undone).length;
     const live = () => cfg.enabled && !cfg.locked && !S.destroyed;
+    /** waiting on a question (keep/flip, read it, graph it, what x vanishing means) — no moves until it is answered */
+    const busy = (P) => Boolean(P.pending || P.flipQ || P.reading || P.graphing);
+    /** past the moves: reading or graphing the answer — undo is off from here */
+    const settled = (P) => Boolean(P.reading || P.graphing);
+    /** a phone-width calculator gets a shorter number line with bigger labels */
+    const narrow = () => (el.clientWidth || 600) < 520;
 
     /* ── scoring ── */
     function scoreOf(P) {
@@ -623,6 +730,10 @@
       if (P.hints) r.push('a hint was used');
       if (movesOf(P) > P.par + block.slack) r.push(movesOf(P) + ' moves — full points needs ' + (P.par + block.slack) + ' or fewer');
       if (P.sp.tries > 1) r.push('second try on what the leftover statement means');
+      if (P.slips.some((s) => s.kind === 'flip')) r.push('wrong call on keeping or flipping the sign');
+      if (P.slips.some((s) => s.kind === 'read')) r.push('misread the answer from ' + P.v + '’s side');
+      if (P.graph && P.graph.missed) r.push('the graph was missed');
+      else if (P.graph && P.graph.tries > 1) r.push('second try on the graph');
       return r;
     }
     function totals() {
@@ -633,21 +744,29 @@
 
     /* ── the report the lesson page (or an HTML lesson) keeps ── */
     function stepOut(s, v) {
-      if (!isMove(s)) return { kind: s.kind, text: s.text, t: s.t };
+      // read / graph / flip-slip notes go out as plain notes (with a tag), so any verify page can show them
+      if (!isMove(s)) return s.kind === 'hint' || s.kind === 'note' ? { kind: s.kind, text: s.text, t: s.t } : { kind: 'note', tag: s.kind, text: s.text, t: s.t };
       const o = { kind: s.kind, say: s.say, from: [sideText(s.from.L, v), sideText(s.from.R, v)], to: [sideText(s.to.L, v), sideText(s.to.R, v)], via: s.via, t: s.t };
+      if (isIneq(s.from)) { o.fromRel = relOf(s.from); o.rel = relOf(s.to); }
       if (s.kind === 'op') o.op = opText(s.op, s.val, s.isX, v);
+      if (s.flip) o.flip = s.flip;
       if (s.at) o.at = s.at;
       if (s.undone) o.undone = true;
       return o;
     }
     function problemOut(P) {
       const o = { n: P.n, kind: P.spec.kind, eq: P.spec.eq, status: P.status, earned: P.earned, possible: P.spec.points };
+      if (P.spec.ask) o.ask = P.spec.ask;
       if (P.error) { o.error = P.error; return o; }
       if (P.spec.kind === 'spot') { o.start = eqText(P.orig, P.v); o.spot = P.spec.spot; o.tries = P.spot.tries; o.picks = P.spot.given; o.answer = P.spot.correct.map((p) => labelOf(P, p)); return o; }
       o.start = eqText(P.orig, P.v); o.startSides = [sideText(P.orig.L, P.v), sideText(P.orig.R, P.v)]; o.par = P.par; o.moves = movesOf(P); o.hints = P.hints; o.undos = P.undos;
+      if (isIneq(P.orig)) o.startRel = relOf(P.orig);
       if (P.answer) o.answer = P.answer;
       if (P.check) o.check = P.check;
       if (P.sp.tries) o.special = P.sp.given;
+      if (P.slips.length) o.slips = P.slips;
+      if (P.final && P.final.read) o.read = P.final.read;
+      if (P.graph) o.graph = { answer: graphWords(P.graph.answer), given: P.graph.given, tries: P.graph.tries, missed: Boolean(P.graph.missed), done: Boolean(P.graph.done) };
       if (P.blocked.length) o.blocked = P.blocked;
       o.steps = P.steps.map((s) => stepOut(s, P.v));
       return o;
@@ -661,34 +780,150 @@
 
     /* ── moves ── */
     function say(msg, kind) { S.msg = msg || ''; S.msgKind = kind || ''; }
+    const scales = (step) => step.kind === 'op' && (step.op === '*' || step.op === '/');
+    const opVerb = (step) => (step.op === '/' ? 'dividing' : 'multiplying');
     function doStep(P, step) {
-      if (P.status !== 'open' || P.pending) return;
+      if (P.status !== 'open' || busy(P)) return;
       const from = clone(P.cur);
       let to, words;
       if (step.kind === 'op') { to = applyOp(from, step.op, step.val, step.isX, P.v); words = sayOp(step.op, step.val, step.isX, P.v); }
       else if (step.kind === 'combine') { to = applyCombine(from, step.s, step.only); words = 'combine like terms' + (step.s ? ' on the ' + sideName(step.s) : ''); }
       else { to = applyDistribute(from, step.s, step.i); words = 'distribute' + (step.m ? ' the ' + multWord(step.m) : ''); }
-      const entry = { kind: step.kind, op: step.op, val: step.val, isX: step.isX, via: step.via || 'tap', at: step.at || null, say: words, from: from, to: to, t: secs(P), undone: false };
+      // inequality, × or ÷: the move is legal (applyOp did not throw) — but first the student says keep or flip
+      if (isIneq(from) && scales(step) && !step.flip) {
+        P.flipQ = { step: step, given: [], t: secs(P) };
+        S.sel = null; S.armed = null; say('');
+        log('calc', { p: P.n, do: 'ask-flip', op: opText(step.op, step.val, step.isX, P.v) });
+        report();
+        return;
+      }
+      if (isIneq(from) && scales(step)) words += step.val.n < 0 ? ' · negative, so ' + relOf(from) + ' flips to ' + relOf(to) : ' · positive, so ' + relOf(from) + ' stays';
+      const entry = { kind: step.kind, op: step.op, val: step.val, isX: step.isX, via: step.via || 'tap', at: step.at || null, say: words, from: from, to: to, t: secs(P), undone: false, flip: step.flip || null };
       P.steps.push(entry);
       P.cur = to;
       S.sel = null; S.armed = null;
       const o = outcome(to);
+      say('');
       if (o && o.kind === 'solved') {
-        P.status = 'solved';
-        P.answer = P.v + ' = ' + ftext(o.value);
-        const l = evalSide(P.orig.L, o.value), r = evalSide(P.orig.R, o.value);
-        P.check = 'Check ' + P.v + ' = ' + ftext(o.value) + ' in ' + eqText(P.orig, P.v) + ': ' + ftext(l) + ' = ' + ftext(r) + (feq(l, r) ? ' ✓' : ' ✗');
-        P.earned = scoreOf(P);
-        say(o.flipped ? ftext(o.value) + ' = ' + P.v + ' is the same as ' + P.answer + '.' : '', 'ok');
+        if (o.flipped && isIneq(to)) P.reading = { value: o.value, rel: o.rel, order: P.n % 2, given: [] };
+        else finishSolved(P, o.rel, o.value, o.flipped);
       } else if (o && o.kind === 'special') {
         P.pending = true; P.truth = o.truth;
-        say('');
-      } else say('');
+      }
       log('calc', { p: P.n, do: step.kind, op: entry.kind === 'op' ? opText(step.op, step.val, step.isX, P.v) : undefined, via: entry.via, to: eqText(to, P.v) });
       report();
     }
+    /** a whole number inside the answer, for the check line */
+    function testPoint(rel, value) {
+      const b = fnum(value);
+      if (rel === '<' || rel === '≤') return F(isInt(value) ? value.n - 1 : Math.floor(b));
+      return F(isInt(value) ? value.n + 1 : Math.ceil(b));
+    }
+    /** x is alone on the left: write the answer + check; inequalities go on to the graph */
+    function finishSolved(P, rel, value, flipped) {
+      P.answer = ansText(rel, value, P.v);
+      const ro = relOf(P.orig);
+      if (rel === '=') {
+        const l = evalSide(P.orig.L, value), r = evalSide(P.orig.R, value);
+        P.check = 'Check ' + P.answer + ' in ' + eqText(P.orig, P.v) + ': ' + ftext(l) + ' = ' + ftext(r) + (feq(l, r) ? ' ✓' : ' ✗');
+      } else {
+        const tp = testPoint(rel, value), l = evalSide(P.orig.L, tp), r = evalSide(P.orig.R, tp);
+        P.check = 'Test ' + P.v + ' = ' + ftext(tp) + ' (it is in ' + P.answer + ') in ' + eqText(P.orig, P.v) + ': ' + ftext(l) + ' ' + ro + ' ' + ftext(r) + (holds(l, r, ro) ? ' ✓' : ' ✗');
+      }
+      P.final = Object.assign(P.final || {}, { rel: rel, value: value });
+      if (rel !== '=' && block.graph) {
+        P.graphing = true;
+        P.graph = { answer: { circle: closedRel(rel) ? 'closed' : 'open', side: shadeOf(rel) }, circle: null, side: null, given: [], tries: 0, missed: false, done: false };
+        say(P.answer + ' — now graph it.', 'ok');
+        return;
+      }
+      P.status = 'solved';
+      P.earned = scoreOf(P);
+      say(flipped && rel === '=' ? ftext(value) + ' = ' + P.v + ' is the same as ' + P.answer + '.' : '', 'ok');
+    }
+
+    /* ── keep or flip? ── */
+    function flipExplain(step, choice, rel) {
+      const val = step.val, neg = val.n < 0, by = (step.op === '/' ? 'Divide' : 'Multiply') + ' both by ' + ftext(val);
+      if (!neg) return 'Not this time. ' + ftext(val) + ' is positive. ' + (step.op === '/' ? 'Dividing' : 'Multiplying') + ' by a positive never flips the sign — not even when a side is negative or the answer will be negative. Only a negative multiplier or divisor flips it.';
+      const a = step.op === '/' ? fabs(val) : ONE, b = step.op === '/' ? fmul(F(2), fabs(val)) : F(2);
+      const f = step.op === '/' ? fdiv(ONE, val) : val, a2 = fmul(a, f), b2 = fmul(b, f);
+      return 'Test it with numbers: ' + ftext(a) + ' < ' + ftext(b) + ' is true. ' + by + ': ' + ftext(a2) + ' and ' + ftext(b2) + '. Is ' + ftext(a2) + ' < ' + ftext(b2) + '? No — ' + ftext(a2) + ' > ' + ftext(b2) + '. A negative turns the order around, so the ' + rel + ' has to flip.';
+    }
+    function flipAnswer(P, choice) {
+      const q = P.flipQ;
+      if (!q || P.status !== 'open') return;
+      const st = q.step, neg = st.val.n < 0, right = (choice === 'flip') === neg, rel = relOf(P.cur);
+      if (q.given.indexOf(choice) >= 0) return;
+      q.given.push(choice);
+      log('calc', { p: P.n, do: 'flip', op: opText(st.op, st.val, st.isX, P.v), given: choice, right: right });
+      if (right) {
+        P.flipQ = null;
+        doStep(P, Object.assign({}, st, { flip: { asked: rel, given: q.given.slice(), right: q.given.length === 1, flips: neg } }));
+        if (!S.msg) say(q.given.length > 1 ? 'Right this time.' : neg ? 'Right — ' + opVerb(st) + ' by a negative flips it.' : 'Right — a positive keeps the sign.', 'ok');
+        return;
+      }
+      P.slips.push({ kind: 'flip', op: opText(st.op, st.val, st.isX, P.v), given: choice, t: secs(P) });
+      P.steps.push({ kind: 'slip', text: (choice === 'flip' ? 'flipped' : 'kept') + ' the ' + rel + ' when ' + opVerb(st) + ' by ' + ftext(st.val) + ' — ' + (neg ? 'a negative flips it' : 'a positive keeps it'), t: secs(P) });
+      say(flipExplain(st, choice, rel), 'bad');
+      report();
+    }
+
+    /* ── 6 < x → x > 6 ── */
+    function readAnswer(P, rel) {
+      const r = P.reading;
+      if (!r || P.status !== 'open') return;
+      const given = ansText(rel, r.value, P.v), right = rel === r.rel;
+      if (r.given.indexOf(given) >= 0) return;
+      r.given.push(given);
+      log('calc', { p: P.n, do: 'read', given: given, right: right });
+      if (right) {
+        const from = eqText(P.cur, P.v);
+        P.reading = null;
+        P.final = { read: { from: from, given: r.given.slice(), right: r.given.length === 1 } };
+        P.steps.push({ kind: 'read', text: 'read it from ' + P.v + '’s side: ' + from + ' means ' + given, t: secs(P) });
+        finishSolved(P, r.rel, r.value, true);
+      } else {
+        const from = relOf(P.cur);
+        P.slips.push({ kind: 'read', given: given, t: secs(P) });
+        P.steps.push({ kind: 'slip', text: 'read ' + eqText(P.cur, P.v) + ' as ' + given, t: secs(P) });
+        say('Not quite. Say ' + eqText(P.cur, P.v) + ' out loud: “' + ftext(r.value) + ' ' + REL_WORD[from] + ' ' + P.v + '.” So ' + P.v + ' ' + REL_WORD[r.rel] + ' ' + ftext(r.value) + '. Swap the sides and the sign turns around with them — its point stays aimed at the same number.', 'bad');
+      }
+      report();
+    }
+
+    /* ── graph it ── */
+    function graphSet(P, key, val) {
+      if (!P.graphing || !P.graph || P.graph.done) return;
+      P.graph[key] = val; say('');
+    }
+    function graphCheck(P) {
+      const g = P.graph;
+      if (!P.graphing || !g || g.done || !g.circle || !g.side) return;
+      const right = g.circle === g.answer.circle && g.side === g.answer.side;
+      g.tries++; g.given.push(graphWords(g));
+      log('calc', { p: P.n, do: 'graph', given: graphWords(g), right: right });
+      const value = P.final.value, rel = P.final.rel;
+      if (right || (graded && g.tries >= 2)) {
+        if (!right) { g.missed = true; g.circle = g.answer.circle; g.side = g.answer.side; }
+        g.done = true; P.graphing = false;
+        P.steps.push({ kind: 'graph', text: 'graphed ' + P.answer + ': ' + graphWords(g.answer) + ' from ' + ftext(value) + (right ? (g.tries > 1 ? ' (second try)' : '') : ' (missed twice — shown)'), t: secs(P) });
+        P.status = 'solved'; P.earned = scoreOf(P);
+        say(right ? (g.tries > 1 ? 'Right on the second check.' : 'That is the graph of ' + P.answer + '.') : 'Not this time. This is the graph of ' + P.answer + ': ' + graphWords(g.answer) + '.', right ? 'ok' : 'bad');
+      } else {
+        const tp = testPoint(rel, value), parts = [];
+        if (g.circle !== g.answer.circle) parts.push(closedRel(rel) ? rel + ' includes ' + ftext(value) + ' itself, so the circle is filled in (closed)' : rel + ' does not include ' + ftext(value) + ' itself, so the circle stays hollow (open)');
+        if (g.side !== g.answer.side) parts.push('the numbers that work are on the ' + g.answer.side + ' — ' + ftext(tp) + ' works, and it sits to the ' + g.answer.side + ' of ' + ftext(value));
+        say(graded ? 'Not yet. Check both parts: a closed circle only for ≤ or ≥ (the boundary counts), and shade the side where a test number works. One more check — for half credit.'
+          : 'Not yet: ' + parts.join('; and ') + '.', 'bad');
+      }
+      report();
+    }
+
     function undo(P) {
       if (P.status !== 'open') return;
+      if (P.flipQ) { P.flipQ = null; S.sel = null; say('Move cancelled.'); log('calc', { p: P.n, do: 'cancel' }); report(); return; }
+      if (settled(P)) return;
       for (let i = P.steps.length - 1; i >= 0; i--) {
         const s = P.steps[i];
         if (isMove(s) && !s.undone) {
@@ -702,30 +937,34 @@
       say('Nothing to undo yet.');
     }
     function restart(P) {
-      if (P.status !== 'open' || !P.steps.some((s) => isMove(s) && !s.undone)) return;
+      if (P.status !== 'open' || settled(P) || !P.steps.some((s) => isMove(s) && !s.undone)) return;
       P.steps.forEach((s) => { if (isMove(s)) s.undone = true; });
       P.steps.push({ kind: 'note', text: 'Started over', t: secs(P) });
-      P.cur = clone(P.orig); P.pending = false; P.undos++;
+      P.cur = clone(P.orig); P.pending = false; P.flipQ = null; P.undos++;
       S.sel = null; say('Back to the start. Your old steps stay on the tape, crossed out.');
       log('calc', { p: P.n, do: 'restart' });
       report();
     }
     function hintText(P, pl) {
       const v = P.v;
+      if (P.flipQ) { const st = P.flipQ.step; return 'Look only at the number you are ' + opVerb(st) + ' by: ' + ftext(st.val) + '. ' + (st.val.n < 0 ? 'It is negative, and multiplying or dividing by a negative flips the sign.' : 'It is positive, and a positive never flips the sign.'); }
+      if (P.reading) return 'Read it from ' + v + '’s side: ' + eqText(P.cur, v) + ' says the same thing as ' + ansText(P.reading.rel, P.reading.value, v) + '. The sign turns around when the sides swap.';
+      if (P.graphing) { const a = P.graph.answer, rel = P.final.rel, val = ftext(P.final.value); return (a.circle === 'closed' ? 'Closed circle — ' + rel + ' includes ' + val + '.' : 'Open circle — ' + rel + ' does not include ' + val + '.') + ' Shade ' + a.side + ', where ' + ftext(testPoint(rel, P.final.value)) + ' and the other numbers that work are.'; }
       if (!pl) return P.pending ? v + ' is gone. Decide what the statement that is left means.' : v + ' is already alone.';
       const how = pl.kind === 'op' ? sayOp(pl.op, pl.val, pl.isX, v) : '';
+      const sign = (c) => (isIneq(P.cur) ? (c.n < 0 ? ' It is negative, so the ' + relOf(P.cur) + ' will flip.' : ' It is positive, so the ' + relOf(P.cur) + ' stays.') : '');
       if (pl.why === 'distribute') return 'Open the parentheses: distribute the ' + multWord(pl.m) + (tapMoves ? ' (tap the ' + multWord(pl.m) + ', or press Distribute).' : ' (press Distribute).');
-      if (pl.why === 'detach-group') return 'The parentheses are alone on the ' + sideName(pl.s) + '. Detach the ' + multWord(pl.m) + ': ' + how + '.';
+      if (pl.why === 'detach-group') return 'The parentheses are alone on the ' + sideName(pl.s) + '. Detach the ' + multWord(pl.m) + ': ' + how + '.' + sign(pl.m);
       if (pl.why === 'combine') return 'The ' + sideName(pl.s) + ' side has like terms that are not combined yet. Combine them first.';
       if (pl.why === 'move-x') return v + ' is on both sides. Move ' + termLabel({ t: 'x', c: pl.c }, v) + ' off the ' + sideName(pl.s) + ': ' + how + '.';
       if (pl.why === 'move-k') return 'Clear the ' + termLabel({ t: 'k', c: pl.c }, v) + ' away from the ' + v + '-term: ' + how + '.';
-      return 'The ' + v + '-term is alone. Detach its coefficient ' + ftext(pl.c) + ': ' + how + '.';
+      return 'The ' + v + '-term is alone. Detach its coefficient ' + ftext(pl.c) + ': ' + how + '.' + sign(pl.c);
     }
     function hint(P) {
       if (P.status !== 'open' || !block.hints) return;
       if (graded && !P.hints && S.armed !== P.n) { S.armed = P.n; say('A hint caps this problem at half credit. Press Hint again to see it.', 'hint'); return; }
       S.armed = null;
-      const text = hintText(P, P.pending ? null : plan(P.cur));
+      const text = hintText(P, busy(P) ? null : plan(P.cur));
       P.hints++;
       P.steps.push({ kind: 'hint', text: text, t: secs(P) });
       P.earned = scoreOf(P);
@@ -872,7 +1111,7 @@
     }
     function press(k) {
       const P = cur();
-      if (!P || P.status !== 'open' || P.pending || P.spec.kind !== 'solve' || !live()) return;
+      if (!P || P.status !== 'open' || busy(P) || P.spec.kind !== 'solve' || !live()) return;
       const e = S.entry;
       say('');
       if (k === '+' || k === '-' || k === '*' || k === '/') e.op = k;
@@ -917,8 +1156,8 @@
       if (graded && !cfg.enabled && !cfg.locked) h += '<p class="yc-gate">Type your name at the top of the lesson to start — then this work unlocks.</p>';
       if (cfg.locked) h += '<p class="yc-gate">Sealed — this work is in your result file.</p>';
       if (free) {
-        h += '<div class="yc-freebar"><input type="text" data-fid="free-in" class="yc-free-in" placeholder="Type an equation, like 3x + 5 = 20" value="' + esc(S.freeText) + '" aria-label="Equation" autocomplete="off" spellcheck="false"' + (off ? ' disabled' : '') + ' /><button type="button" class="yc-opt" data-act="free-go" data-fid="free-go"' + (off ? ' disabled' : '') + '>Start solving</button></div>';
-        h += '<div class="yc-ex"><span>Try:</span>' + ['2x + 3 = 11', '7x - 4 = 3x + 12', 'x/4 + 2 = 9', '3(x + 4) = 21', '5 - 2x = 3x - 10', '2x + 5 = 2x + 9'].map((q) => '<button type="button" data-ex="' + esc(q) + '"' + (off ? ' disabled' : '') + '>' + esc(q.replace(/-/g, MINUS)) + '</button>').join('') + '</div>';
+        h += '<div class="yc-freebar"><input type="text" data-fid="free-in" class="yc-free-in" placeholder="' + esc(cfg.placeholder || 'Type an equation, like 3x + 5 = 20') + '" value="' + esc(S.freeText) + '" aria-label="Equation" autocomplete="off" spellcheck="false"' + (off ? ' disabled' : '') + ' /><button type="button" class="yc-opt" data-act="free-go" data-fid="free-go"' + (off ? ' disabled' : '') + '>Start solving</button></div>';
+        h += '<div class="yc-ex"><span>Try:</span>' + EXAMPLES.map((q) => '<button type="button" data-ex="' + esc(q) + '"' + (off ? ' disabled' : '') + '>' + esc(q.replace(/-/g, MINUS).replace(/<=/g, '≤').replace(/>=/g, '≥')) + '</button>').join('') + '</div>';
       }
       if (S.problems.length > 1) {
         h += '<nav class="yc-nav" aria-label="Problems"><span class="yc-lbl">Problems</span>';
@@ -928,7 +1167,7 @@
         });
         h += '</nav>';
       }
-      if (!P) return h + (free ? '<p class="yc-blank">Type any linear equation above — or pick one to try. You make the moves; the calculator does the arithmetic and writes down your work.</p>' : '<p class="yc-blank">No problems in this block.</p>') + '</section>';
+      if (!P) return h + (free ? '<p class="yc-blank">' + esc(cfg.blank || 'Type any linear equation above — or pick one to try. You make the moves; the calculator does the arithmetic and writes down your work.') + '</p>' : '<p class="yc-blank">No problems in this block.</p>') + '</section>';
       if (!P.t0 && live()) P.t0 = Date.now();
       h += problemView(P, off);
       return h + '</section>';
@@ -937,13 +1176,15 @@
 
     function problemView(P, off) {
       const v = P.v;
+      const ineq = !P.error && isIneq(P.orig);
       let h = '<div class="yc-task"><div class="yc-task-text"><b>' + (free ? 'Solve' : 'Problem ' + P.n) + '</b>';
       if (P.spec.kind === 'spot') h += SPOT_ASK[P.spec.spot].replace(/\{v\}/g, esc(v));
-      else h += 'Get <i>' + esc(v) + '</i> alone. ' + (tapMoves && padShown ? 'Tap a term or key in a move.' : tapMoves ? 'Tap the terms to make your moves.' : 'Key in each move.');
+      else h += 'Get <i>' + esc(v) + '</i> alone' + (ineq && block.graph ? ', then graph it' : '') + '. ' + (tapMoves && padShown ? 'Tap a term or key in a move.' : tapMoves ? 'Tap the terms to make your moves.' : 'Key in each move.');
       h += '</div><div class="yc-pills">';
       if (P.spec.kind === 'solve' && !P.error) h += '<span class="yc-pill" title="The fewest moves the textbook route takes">Par ' + P.par + '</span>';
       if (graded) h += '<span class="yc-pill">' + fmtPts(P.spec.points) + ' pt' + (P.spec.points === 1 ? '' : 's') + '</span>';
       h += '</div></div>';
+      if (P.spec.ask) h += '<p class="yc-ask">' + esc(prettyMinus(P.spec.ask)) + '</p>';
       if (P.error) return h + '<p class="yc-err">Could not load “' + esc(P.spec.eq) + '”: ' + esc(P.error) + '</p>';
 
       const open = P.status === 'open';
@@ -955,7 +1196,7 @@
           sp.sel.forEach((p) => { if (!cor.has(p)) marks[p] = 'bad'; });
         } else sp.sel.forEach((p) => { marks[p] = 'on'; });
         const ctx = { v: v, gran: P.spec.spot === 'coefficients' ? 'parts' : 'term', live: true, sel: null, marks: marks, ghost: P.spec.spot === 'coefficients', off: off || sp.closed };
-        h += '<div class="yc-screen"><div class="yc-eqn">' + sideHtml(P.orig.L, 'L', ctx) + '<span class="yc-eqs">=</span>' + sideHtml(P.orig.R, 'R', ctx) + '</div></div>';
+        h += '<div class="yc-screen"><div class="yc-eqn">' + sideHtml(P.orig.L, 'L', ctx) + '<span class="yc-eqs">' + esc(relOf(P.orig)) + '</span>' + sideHtml(P.orig.R, 'R', ctx) + '</div></div>';
         h += '<p class="yc-msg ' + S.msgKind + '" aria-live="polite">' + esc(S.msg) + '</p>';
         h += '<div class="yc-spot">';
         if (!sp.closed) h += '<button type="button" class="yc-opt" data-act="spot-check" data-fid="spot-check"' + (off || !open ? ' disabled' : '') + '>' + (sp.tries ? 'Check again' : 'Check') + '</button><span class="yc-pill">' + sp.sel.length + ' picked</span>';
@@ -965,14 +1206,29 @@
         return h;
       }
 
-      const ctx = { v: v, gran: 'term', live: open && !P.pending, sel: S.sel, off: off };
-      h += '<div class="yc-screen"><div class="yc-eqn">' + sideHtml(P.cur.L, 'L', ctx) + '<span class="yc-eqs">=</span>' + sideHtml(P.cur.R, 'R', ctx) + '</div>';
-      if (padShown && open && !P.pending) h += '<div class="yc-entry" aria-live="polite">' + entryHtml(P) + '</div>';
+      const ctx = { v: v, gran: 'term', live: open && !busy(P), sel: S.sel, off: off };
+      h += '<div class="yc-screen"><div class="yc-eqn">' + sideHtml(P.cur.L, 'L', ctx) + '<span class="yc-eqs">' + esc(relOf(P.cur)) + '</span>' + sideHtml(P.cur.R, 'R', ctx) + '</div>';
+      if (padShown && open && !busy(P)) h += '<div class="yc-entry" aria-live="polite">' + entryHtml(P) + '</div>';
       h += '</div>';
       h += '<p class="yc-msg ' + S.msgKind + '" aria-live="polite">' + esc(S.msg) + '</p>';
 
       if (!open) h += doneHtml(P, off);
-      else if (P.pending) {
+      else if (P.flipQ) {
+        const st = P.flipQ.step, rel = relOf(P.cur), g = P.flipQ.given, d = (c) => (off || g.indexOf(c) >= 0 ? ' disabled' : '');
+        h += '<div class="yc-special is-flip"><p>You are about to <b>' + esc(sayOp(st.op, st.val, st.isX, v)) + '</b>. What happens to the <b>' + esc(rel) + '</b>?</p><div class="yc-opts">'
+          + '<button type="button" class="yc-opt" data-act="flip-keep" data-fid="flip-keep"' + d('keep') + '>Keep it: ' + esc(rel) + '</button>'
+          + '<button type="button" class="yc-opt" data-act="flip-flip" data-fid="flip-flip"' + d('flip') + '>Flip it: ' + esc(FLIP[rel]) + '</button>'
+          + '<button type="button" class="yc-opt alt" data-act="flip-cancel" data-fid="flip-cancel"' + (off ? ' disabled' : '') + '>Cancel the move</button></div>'
+          + '<p class="yc-sub">Adding and subtracting never change the sign. Multiplying or dividing might — you decide.</p></div>';
+      } else if (P.reading) {
+        const r = P.reading, a = [r.rel, FLIP[r.rel]];
+        if (r.order) a.reverse();
+        h += '<div class="yc-special"><p><b>' + esc(v) + ' is alone</b> — but on the right: <b>' + esc(eqText(P.cur, v)) + '</b>. Read it from ' + esc(v) + '’s side. Which one says the same thing?</p><div class="yc-opts">'
+          + a.map((rel, i) => { const t = ansText(rel, r.value, v); return '<button type="button" class="yc-opt" data-read="' + esc(rel) + '" data-fid="read' + i + '"' + (off || r.given.indexOf(t) >= 0 ? ' disabled' : '') + '>' + esc(t) + '</button>'; }).join('')
+          + '</div></div>';
+      } else if (P.graphing) {
+        h += graphHtml(P, off);
+      } else if (P.pending) {
         h += '<div class="yc-special"><p><b>' + esc(v) + ' is gone.</b> You are left with <b>' + esc(eqText(P.cur, v)) + '</b>. What does that mean?</p><div class="yc-opts">'
           + '<button type="button" class="yc-opt" data-act="sp-none" data-fid="sp-none"' + (off ? ' disabled' : '') + '>No number works — no solution</button>'
           + '<button type="button" class="yc-opt" data-act="sp-all" data-fid="sp-all"' + (off ? ' disabled' : '') + '>Every number works</button></div></div>';
@@ -988,18 +1244,33 @@
       }
 
       if (open) {
-        const moves = P.steps.some((s) => isMove(s) && !s.undone);
+        const moves = P.steps.some((s) => isMove(s) && !s.undone), b = busy(P), done = settled(P);
         h += '<div class="yc-tools" role="group" aria-label="Tools">'
-          + '<button type="button" class="yc-tool" data-act="combine" data-fid="combine"' + (off || P.pending || !(needsCombine(P.cur.L) || needsCombine(P.cur.R)) ? ' disabled' : '') + '>Combine like terms</button>'
-          + '<button type="button" class="yc-tool" data-act="distribute" data-fid="distribute"' + (off || P.pending || !hasGroup(P.cur) ? ' disabled' : '') + '>Distribute</button>'
-          + '<button type="button" class="yc-tool" data-act="undo" data-fid="undo"' + (off || !moves ? ' disabled' : '') + '>↩ Undo</button>'
-          + '<button type="button" class="yc-tool" data-act="restart" data-fid="restart"' + (off || !moves ? ' disabled' : '') + '>Start over</button>'
+          + '<button type="button" class="yc-tool" data-act="combine" data-fid="combine"' + (off || b || !(needsCombine(P.cur.L) || needsCombine(P.cur.R)) ? ' disabled' : '') + '>Combine like terms</button>'
+          + '<button type="button" class="yc-tool" data-act="distribute" data-fid="distribute"' + (off || b || !hasGroup(P.cur) ? ' disabled' : '') + '>Distribute</button>'
+          + '<button type="button" class="yc-tool" data-act="undo" data-fid="undo"' + (off || done || !(moves || P.flipQ) ? ' disabled' : '') + '>↩ Undo</button>'
+          + '<button type="button" class="yc-tool" data-act="restart" data-fid="restart"' + (off || done || !moves ? ' disabled' : '') + '>Start over</button>'
           + (block.hints ? '<button type="button" class="yc-tool' + (S.armed === P.n ? ' is-armed' : '') + '" data-act="hint" data-fid="hint"' + (off ? ' disabled' : '') + '>' + (S.armed === P.n ? 'Show hint (half credit)' : 'Hint') + '</button>' : '')
           + '</div>';
       }
       const pad = padShown && open;
-      h += '<div class="yc-work' + (pad ? '' : ' no-pad') + '">' + (pad ? padHtml(P, off || P.pending) : '') + tapeHtml(P) + '</div>';
+      h += '<div class="yc-work' + (pad ? '' : ' no-pad') + '">' + (pad ? padHtml(P, off || busy(P)) : '') + tapeHtml(P) + '</div>';
       return h;
+    }
+    function graphHtml(P, off) {
+      const g = P.graph, fin = P.final, d = off ? ' disabled' : '';
+      const on = (k, val) => (g[k] === val ? ' is-on' : '');
+      let h = '<div class="yc-graph"><p><b>Graph ' + esc(P.answer) + '.</b> Pick the circle, then the side to shade.</p>';
+      h += nlHtml(fin.value, g.circle, g.side, 'acc', 'Your graph: ' + graphWords(g), narrow());
+      h += '<div class="yc-gctl"><div class="grp" role="group" aria-label="Circle"><span class="lbl">Circle</span>'
+        + '<button type="button" class="yc-gb' + on('circle', 'open') + '" data-act="g-open" data-fid="g-open" aria-pressed="' + (g.circle === 'open') + '"' + d + '><span class="dot"></span>Open</button>'
+        + '<button type="button" class="yc-gb' + on('circle', 'closed') + '" data-act="g-closed" data-fid="g-closed" aria-pressed="' + (g.circle === 'closed') + '"' + d + '><span class="dot f"></span>Closed</button></div>'
+        + '<div class="grp" role="group" aria-label="Shade"><span class="lbl">Shade</span>'
+        + '<button type="button" class="yc-gb' + on('side', 'left') + '" data-act="g-left" data-fid="g-left" aria-pressed="' + (g.side === 'left') + '"' + d + '>← Left</button>'
+        + '<button type="button" class="yc-gb' + on('side', 'right') + '" data-act="g-right" data-fid="g-right" aria-pressed="' + (g.side === 'right') + '"' + d + '>Right →</button></div></div>';
+      h += '<div class="yc-gcheck"><button type="button" class="yc-opt" data-act="g-check" data-fid="g-check"' + (off || !g.circle || !g.side ? ' disabled' : '') + '>' + (g.tries ? 'Check again' : 'Check my graph') + '</button>'
+        + (graded && g.tries ? '<span class="yc-pill">Last check — half credit</span>' : '') + '</div>';
+      return h + '</div>';
     }
     function nextBtn(off) {
       const nxt = S.problems.findIndex((q, i) => i > S.idx && q.status === 'open');
@@ -1012,6 +1283,7 @@
       h += '<span>' + movesOf(P) + ' move' + (movesOf(P) === 1 ? '' : 's') + ' · par ' + P.par + '</span>';
       if (graded) h += '<span>' + fmtPts(P.earned) + ' / ' + fmtPts(P.spec.points) + ' pts</span>';
       h += nextBtn(off);
+      if (P.graph && P.graph.done) h += nlHtml(P.final.value, P.graph.answer.circle, P.graph.answer.side, P.graph.missed ? 'bad' : 'ok', 'Graph of ' + P.answer, narrow());
       if (half) h += '<span class="why">Half credit: ' + esc(halfReasons(P).join('; ')) + '.</span>';
       if (P.spec.note) h += '<span class="why">' + esc(P.spec.note) + '</span>';
       return h + '</div>';
@@ -1032,7 +1304,7 @@
     function rowHtml(st, v, cls) {
       const c = cls ? ' ' + cls : '';
       const ctx = { v: v, gran: 'term', live: false };
-      return '<div class="yc-l' + c + '">' + sideHtml(st.L, 'L', ctx) + '</div><div class="yc-e' + c + '">=</div><div class="yc-r' + c + '">' + sideHtml(st.R, 'R', ctx) + '</div>';
+      return '<div class="yc-l' + c + '">' + sideHtml(st.L, 'L', ctx) + '</div><div class="yc-e' + c + '">' + esc(relOf(st)) + '</div><div class="yc-r' + c + '">' + sideHtml(st.R, 'R', ctx) + '</div>';
     }
     function tapeHtml(P) {
       const v = P.v;
@@ -1043,11 +1315,11 @@
       const flush = () => { if (restore) { h += '<div class="yc-note back">↩ back to</div>' + rowHtml(restore, v, ''); restore = null; } };
       const lastLive = (() => { for (let i = P.steps.length - 1; i >= 0; i--) if (isMove(P.steps[i]) && !P.steps[i].undone) return i; return -1; })();
       P.steps.forEach((s, i) => {
-        if (!isMove(s)) { flush(); h += '<div class="yc-note' + (s.kind === 'hint' ? ' hint' : '') + '">' + (s.kind === 'hint' ? 'Hint: ' : '') + esc(s.text) + '</div>'; return; }
+        if (!isMove(s)) { flush(); h += '<div class="yc-note' + (s.kind === 'hint' ? ' hint' : s.kind === 'slip' ? ' slip' : s.kind === 'read' || s.kind === 'graph' ? ' good' : '') + '">' + (s.kind === 'hint' ? 'Hint: ' : s.kind === 'slip' ? '✗ ' : s.kind === 'read' || s.kind === 'graph' ? '✓ ' : '') + esc(s.text) + '</div>'; return; }
         if (!s.undone) { if (restore) flush(); n++; }
         const u = s.undone ? ' is-undone' : '';
         h += '<div class="yc-say' + u + '"><b>' + (s.undone ? '×' : n) + '</b><span>' + esc(s.say) + (s.undone ? ' — undone' : '') + '</span>' + (s.at ? '<i>· ' + (s.via === 'keys' ? 'keyed, with ' : 'tapped ') + esc(s.at) + '</i>' : s.via === 'keys' ? '<i>· keyed</i>' : '') + '</div>';
-        if (s.kind === 'op') { const o = opHtml(s.op, s.val, s.isX, v); h += '<div class="yc-l yc-op' + u + '">' + o + '</div><div class="yc-e' + u + '"></div><div class="yc-r yc-op' + u + '">' + o + '</div>'; }
+        if (s.kind === 'op') { const o = opHtml(s.op, s.val, s.isX, v); h += '<div class="yc-l yc-op' + u + '">' + o + '</div><div class="yc-e' + u + '">' + (s.flip && s.flip.flips ? '<span class="yc-flip" title="The sign flips">flip</span>' : '') + '</div><div class="yc-r yc-op' + u + '">' + o + '</div>'; }
         const win = !s.undone && i === lastLive && P.status === 'solved' && !P.sp.tries;
         h += rowHtml(s.to, v, (win ? 'yc-win' : '') + u);
         if (s.undone) restore = s.from;
@@ -1147,7 +1419,13 @@
         render(); return;
       }
       if (b.hasAttribute('data-opt')) { const d = S.sel ? describe(P, S.sel) : null; const o = d && d.opts[Number(b.getAttribute('data-opt'))]; if (o) guard(() => doStep(P, o.step)); return; }
+      if (b.hasAttribute('data-read')) { readAnswer(P, b.getAttribute('data-read')); render(); return; }
       const act = b.getAttribute('data-act');
+      if (act === 'flip-keep' || act === 'flip-flip') { guard(() => flipAnswer(P, act === 'flip-flip' ? 'flip' : 'keep')); return; }
+      if (act === 'flip-cancel') { undo(P); render(); return; }
+      if (act === 'g-open' || act === 'g-closed') { graphSet(P, 'circle', act.slice(2)); render(); return; }
+      if (act === 'g-left' || act === 'g-right') { graphSet(P, 'side', act.slice(2)); render(); return; }
+      if (act === 'g-check') { graphCheck(P); render(); return; }
       if (act === 'combine') guard(() => doStep(P, { kind: 'combine', via: 'button' }));
       else if (act === 'distribute') guard(() => doStep(P, { kind: 'distribute', via: 'button' }));
       else if (act === 'undo') { undo(P); render(); }
@@ -1163,7 +1441,7 @@
       if (tag === 'INPUT' || tag === 'TEXTAREA') { if (ev.key === 'Enter' && ev.target.classList.contains('yc-free-in')) { ev.preventDefault(); freeLoad(ev.target.value); render(); } return; }
       if (ev.ctrlKey || ev.metaKey || ev.altKey) { if ((ev.ctrlKey || ev.metaKey) && ev.key === 'z') { const P = cur(); if (P && live()) { ev.preventDefault(); undo(P); render(); } } return; }
       const P = cur();
-      if (!P || !live() || P.spec.kind !== 'solve' || P.status !== 'open' || !padShown) return;
+      if (!P || !live() || P.spec.kind !== 'solve' || P.status !== 'open' || !padShown || busy(P)) return;
       let k = KEYMAP[ev.key];
       if (/^\d$/.test(ev.key)) k = ev.key;
       if (ev.key === P.v || ev.key === P.v.toUpperCase()) k = 'x';
@@ -1191,7 +1469,7 @@
   const API = {
     version: VERSION, mount: mount, parseBlock: parseBlock, parseEquation: parseEquation,
     plan: plan, par: par, outcome: outcome, applyOp: applyOp, applyCombine: applyCombine, applyDistribute: applyDistribute,
-    eqText: eqText, F: F, CalcError: CalcError,
+    eqText: eqText, holds: holds, F: F, CalcError: CalcError,
   };
   if (typeof window !== 'undefined') window.YABCCalc = API;
   if (typeof module === 'object' && module.exports) module.exports = API;

@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Number line explorer — inequalities</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500..900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" />
+<link rel="stylesheet" href="/lesson-kit/lesson.css" />
+<style>
+  :root { --blue: #1f4fb5; }
+  .wrap { max-width: 960px; }
+  body.embed .wrap { padding: 12px; max-width: none; }
+  body.embed .intro { display: none; }
+  body.embed .part { box-shadow: none; margin: 0; }
+  .part { padding: 18px 20px 20px; }
+  .part h2 { margin: 0 0 4px; font-size: 22px; }
+  .part .sub { margin: 0 0 14px; color: var(--ink-2); font-size: 15px; }
+  .top { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .read { font: 900 clamp(30px, 6vw, 44px)/1 var(--font-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .read .v { font-family: "Times New Roman", Georgia, serif; font-style: italic; color: var(--acc); }
+  .same { font-size: 14.5px; color: var(--mute); }
+  .same b { color: var(--ink); font-family: var(--font-display); }
+  .ctl { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin: 6px 0 4px; }
+  .grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .lbl { font: 700 11.5px var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--mute); margin-right: 2px; }
+  .seg { font: 800 18px var(--font-display); min-width: 46px; height: 40px; padding: 0 10px; border-radius: 8px; border: 1.5px solid var(--ink); background: #fff; color: var(--ink); cursor: pointer; }
+  .seg:hover { background: var(--paper); }
+  .seg[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .seg.sm { font-size: 14px; min-width: 40px; height: 36px; }
+  .step { display: inline-flex; align-items: center; border: 1.5px solid var(--ink); border-radius: 8px; overflow: hidden; }
+  .step button { width: 38px; height: 38px; border: 0; background: #fff; font: 800 18px var(--font-display); cursor: pointer; color: var(--ink); }
+  .step button:hover { background: var(--paper); }
+  .step output { min-width: 44px; text-align: center; font: 800 18px var(--font-display); font-variant-numeric: tabular-nums; border-left: 1.5px solid var(--ink); border-right: 1.5px solid var(--ink); line-height: 38px; }
+  svg.nl { display: block; width: 100%; height: auto; touch-action: none; user-select: none; -webkit-user-select: none; overflow: visible; }
+  svg.nl text { font: 600 13px var(--font-mono); fill: var(--mute); }
+  svg.nl text.big { font: 800 15px var(--font-display); fill: var(--ink); }
+  svg.nl .grab { cursor: grab; } svg.nl .grab:active { cursor: grabbing; }
+  .verdict { margin: 4px 0 0; padding: 10px 14px; border-radius: 10px; font-size: 15.5px; border: 1.5px solid var(--line); background: var(--paper); }
+  .verdict.yes { border-color: var(--ok); background: #eef7f1; }
+  .verdict.no { border-color: var(--bad); background: #fbefec; }
+  .verdict b { font-family: var(--font-display); }
+  .hint { font-size: 13px; color: var(--mute); margin: 8px 0 0; }
+  .rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 6px 0 2px; }
+  .rows .sl label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 2px; }
+  .rows .sl b { font-family: var(--font-mono); }
+  .sl.a input { accent-color: var(--acc); } .sl.b input { accent-color: var(--blue); }
+  .rel-row { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: baseline; margin: 6px 0 0; font-size: 15px; }
+  .rel-row .k { font: 700 11.5px var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+  .rel-row .e { font: 800 24px/1.15 var(--font-display); font-variant-numeric: tabular-nums; }
+  .a-c { color: var(--acc); } .b-c { color: var(--blue); }
+  .badge { display: inline-block; margin-top: 10px; padding: 8px 12px; border-radius: 9px; font: 700 15px var(--font-display); }
+  .badge.flip { background: var(--acc); color: #fff; }
+  .badge.keep { background: #eef7f1; color: var(--ok); border: 1.5px solid var(--ok); }
+  .badge.eq { background: var(--paper-2); color: var(--ink-2); }
+  @media (max-width: 520px) { .part { padding: 14px 14px 16px; } .seg { min-width: 42px; } }
+</style>
+</head>
+<body class="math">
+<div class="wrap">
+  <header class="intro">
+    <p class="kicker">Math · Inequalities · Explorer</p>
+    <h1>Number line explorer</h1>
+    <p class="lede">Build an inequality, drag a test number along the line, and see which numbers make it true. Then see why multiplying by a negative turns the sign around.</p>
+  </header>
+
+  <!-- ── part 1: read a graph ─────────────────────────────────────────── -->
+  <section class="card pop part" id="graph" aria-labelledby="g-h">
+    <h2 id="g-h">Graph an inequality</h2>
+    <p class="sub">Pick the sign and the boundary. Then drag the <b>test number</b> (the pin above the line) and watch when it turns green.</p>
+    <div class="top">
+      <div class="read" id="g-read" aria-live="polite"></div>
+      <div class="same" id="g-same"></div>
+    </div>
+    <div class="ctl">
+      <div class="grp" role="group" aria-label="Sign">
+        <span class="lbl">Sign</span>
+        <button type="button" class="seg" data-rel="<" aria-pressed="false">&lt;</button>
+        <button type="button" class="seg" data-rel=">" aria-pressed="false">&gt;</button>
+        <button type="button" class="seg" data-rel="≤" aria-pressed="false">≤</button>
+        <button type="button" class="seg" data-rel="≥" aria-pressed="false">≥</button>
+      </div>
+      <div class="grp">
+        <span class="lbl" id="g-bl">Boundary</span>
+        <span class="step" role="group" aria-labelledby="g-bl">
+          <button type="button" id="g-dec" aria-label="Boundary down one">−</button>
+          <output id="g-b" aria-live="polite">−1</output>
+          <button type="button" id="g-inc" aria-label="Boundary up one">+</button>
+        </span>
+      </div>
+    </div>
+    <svg class="nl" id="g-svg" role="img" aria-label="Number line"></svg>
+    <p class="verdict" id="g-verdict" aria-live="polite"></p>
+    <p class="hint">Drag the circle to move the boundary. Use the arrow keys after clicking the line to move the test number.</p>
+  </section>
+
+  <!-- ── part 2: why it flips ─────────────────────────────────────────── -->
+  <section class="card pop part" id="flip" aria-labelledby="f-h">
+    <h2 id="f-h">Why the sign flips</h2>
+    <p class="sub">Two numbers, <b class="a-c">a</b> and <b class="b-c">b</b>. Multiply both by the same number and see where they land on the second line.</p>
+    <div class="rows">
+      <div class="sl a"><label for="f-a"><span><b class="a-c">a</b></span><b id="f-al">2</b></label><input class="range" type="range" id="f-a" min="-5" max="5" step="1" value="2" /></div>
+      <div class="sl b"><label for="f-b"><span><b class="b-c">b</b></span><b id="f-bl">6</b></label><input class="range" type="range" id="f-b" min="-5" max="5" step="1" value="5" /></div>
+    </div>
+    <div class="ctl">
+      <div class="grp" role="group" aria-label="Multiply both by">
+        <span class="lbl">Multiply both by</span>
+        <button type="button" class="seg sm" data-k="-3" aria-pressed="false">−3</button>
+        <button type="button" class="seg sm" data-k="-2" aria-pressed="false">−2</button>
+        <button type="button" class="seg sm" data-k="-1" aria-pressed="false">−1</button>
+        <button type="button" class="seg sm" data-k="-0.5" aria-pressed="false">−½</button>
+        <button type="button" class="seg sm" data-k="0.5" aria-pressed="false">½</button>
+        <button type="button" class="seg sm" data-k="1" aria-pressed="false">1</button>
+        <button type="button" class="seg sm" data-k="2" aria-pressed="false">2</button>
+        <button type="button" class="seg sm" data-k="3" aria-pressed="false">3</button>
+      </div>
+    </div>
+    <svg class="nl" id="f-svg" role="img" aria-label="Two number lines"></svg>
+    <div class="rel-row">
+      <span class="k">Before</span><span class="e" id="f-before"></span>
+      <span class="k" id="f-afterk">After</span><span class="e" id="f-after"></span>
+    </div>
+    <div id="f-badge" class="badge" aria-live="polite"></div>
+    <p class="hint">Dividing by −2 is the same as multiplying by −½, so it flips too.</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  const MINUS = '−';
+  const part = new URLSearchParams(location.search).get('part');
+  if (part === 'graph' || part === 'flip') {
+    document.body.classList.add('embed');
+    document.getElementById(part === 'graph' ? 'flip' : 'graph').hidden = true;
+  }
+  const NS = 'http://www.w3.org/2000/svg';
+  const $ = (id) => document.getElementById(id);
+  const num = (n) => { const r = Math.round(n * 100) / 100; return (r < 0 ? MINUS : '') + (Math.abs(r) === 0.5 ? '½' : Number.isInteger(Math.abs(r) * 2) && !Number.isInteger(r) ? Math.floor(Math.abs(r)) + '½' : String(Math.abs(r))); };
+  const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
+  const css = (name) => getComputedStyle(document.body).getPropertyValue(name).trim();
+  const holds = (a, b, rel) => (rel === '<' ? a < b : rel === '>' ? a > b : rel === '≤' ? a <= b : rel === '≥' ? a >= b : a === b);
+  const FLIP = { '<': '>', '>': '<', '≤': '≥', '≥': '≤', '=': '=' };
+  const WORD = { '<': 'less than', '>': 'greater than', '≤': 'less than or equal to', '≥': 'greater than or equal to' };
+
+  /** draw a number line axis into svg g; returns x(u) */
+  function axis(svg, W, y, lo, hi, opts) {
+    const pad = 22, X = (u) => pad + ((u - lo) / (hi - lo)) * (W - 2 * pad);
+    const ink = css('--ink') || '#121212';
+    svg.appendChild(el('line', { x1: 8, y1: y, x2: W - 8, y2: y, stroke: ink, 'stroke-width': 2 }));
+    svg.appendChild(el('polygon', { points: `1,${y} 12,${y - 6} 12,${y + 6}`, fill: ink }));
+    svg.appendChild(el('polygon', { points: `${W - 1},${y} ${W - 12},${y - 6} ${W - 12},${y + 6}`, fill: ink }));
+    const spacing = (X(1) - X(0));
+    const every = opts && opts.every ? opts.every : spacing >= 20 ? 1 : spacing >= 11 ? 2 : 4;
+    for (let i = Math.ceil(lo); i <= hi; i++) {
+      const major = i % every === 0;
+      svg.appendChild(el('line', { x1: X(i), y1: y - (major ? 7 : 4), x2: X(i), y2: y + (major ? 7 : 4), stroke: ink, 'stroke-width': major ? 1.5 : 1 }));
+      if (major || (opts && opts.bold === i)) svg.appendChild(el('text', { x: X(i), y: y + 26, 'text-anchor': 'middle', class: (opts && opts.bold === i) ? 'big' : '' }, (i < 0 ? MINUS : '') + Math.abs(i)));
+    }
+    return X;
+  }
+
+  /* ── part 1 ──────────────────────────────────────────────────────── */
+  const G = { rel: '≥', b: -1, t: 2, drag: null };
+  const gsvg = $('g-svg');
+  function gRange() { const W = Math.max(280, gsvg.clientWidth || 640); return W < 520 ? [-6, 6] : [-10, 10]; }
+  function gDraw() {
+    const W = Math.max(280, Math.round(gsvg.clientWidth || 640)), H = 132, Y = 84;
+    const [lo, hi] = gRange();
+    G.b = Math.max(lo + 1, Math.min(hi - 1, G.b)); G.t = Math.max(lo, Math.min(hi, G.t));
+    gsvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    gsvg.innerHTML = '';
+    const X = axis(gsvg, W, Y, lo, hi, { bold: G.b });
+    const acc = css('--acc'), ok = css('--ok'), bad = css('--bad');
+    const left = G.rel === '<' || G.rel === '≤', closed = G.rel === '≤' || G.rel === '≥';
+    // shading + arrow
+    const bx = X(G.b), end = left ? 14 : W - 14;
+    gsvg.appendChild(el('line', { x1: bx, y1: Y, x2: end, y2: Y, stroke: acc, 'stroke-width': 7 }));
+    gsvg.appendChild(el('polygon', { points: left ? `1,${Y} 17,${Y - 10} 17,${Y + 10}` : `${W - 1},${Y} ${W - 17},${Y - 10} ${W - 17},${Y + 10}`, fill: acc }));
+    // boundary circle (draggable)
+    const c = el('circle', { cx: bx, cy: Y, r: 10, fill: closed ? acc : '#fff', stroke: acc, 'stroke-width': 3.5, class: 'grab', 'data-drag': 'b' });
+    gsvg.appendChild(c);
+    // test pin
+    const yes = holds(G.t, G.b, G.rel), tx = X(G.t), col = yes ? ok : bad;
+    const pin = el('g', { class: 'grab', 'data-drag': 't' });
+    pin.appendChild(el('line', { x1: tx, y1: 34, x2: tx, y2: Y - 12, stroke: col, 'stroke-width': 2, 'stroke-dasharray': '3 3' }));
+    pin.appendChild(el('rect', { x: tx - 26, y: 6, width: 52, height: 26, rx: 7, fill: col }));
+    pin.appendChild(el('polygon', { points: `${tx - 6},31 ${tx + 6},31 ${tx},38`, fill: col }));
+    const lab = el('text', { x: tx, y: 24, 'text-anchor': 'middle', fill: '#fff', style: 'fill:#fff;font:800 14px var(--font-display)' }, num(G.t));
+    pin.appendChild(lab);
+    pin.appendChild(el('rect', { x: tx - 30, y: 0, width: 60, height: Y - 8, fill: 'transparent' }));
+    gsvg.appendChild(pin);
+    gsvg.setAttribute('aria-label', `Number line: ${closed ? 'closed' : 'open'} circle at ${num(G.b)}, shaded ${left ? 'left' : 'right'}. Test number ${num(G.t)} is ${yes ? '' : 'not '}a solution.`);
+    // readouts
+    $('g-read').innerHTML = `<span class="v">x</span> ${G.rel.replace('<', '&lt;').replace('>', '&gt;')} ${num(G.b)}`;
+    $('g-same').innerHTML = `Same as <b>${num(G.b)} ${FLIP[G.rel].replace('<', '&lt;').replace('>', '&gt;')} x</b> · ${closed ? 'closed' : 'open'} circle: ${num(G.b)} ${closed ? 'counts' : 'does not count'}`;
+    $('g-b').textContent = num(G.b);
+    document.querySelectorAll('[data-rel]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rel === G.rel)));
+    const v = $('g-verdict');
+    v.className = 'verdict ' + (yes ? 'yes' : 'no');
+    v.innerHTML = `Test <b>x = ${num(G.t)}</b>: is ${num(G.t)} ${WORD[G.rel]} ${num(G.b)}? <b>${yes ? 'Yes' : 'No'}</b> — ${num(G.t)} ${yes ? 'is a solution, so it sits in the shaded part.' : G.t === G.b ? 'is the boundary, and with ' + (G.rel === '<' ? '&lt;' : '&gt;') + ' the boundary does not count (open circle).' : 'is not a solution.'}`;
+  }
+  function gPos(e) { const r = gsvg.getBoundingClientRect(); const W = gsvg.viewBox.baseVal.width; const [lo, hi] = gRange(); const pad = 22; const px = (e.clientX - r.left) * (W / r.width); return lo + ((px - pad) / (W - 2 * pad)) * (hi - lo); }
+  gsvg.addEventListener('pointerdown', (e) => {
+    const t = e.target.closest('[data-drag]');
+    const u = gPos(e);
+    if (t) G.drag = t.dataset.drag;
+    else { G.drag = 't'; G.t = Math.round(u * 2) / 2; gDraw(); }
+    gsvg.setPointerCapture(e.pointerId);
+    gsvg.focus({ preventScroll: true });
+  });
+  gsvg.addEventListener('pointermove', (e) => {
+    if (!G.drag) return;
+    const u = gPos(e);
+    if (G.drag === 'b') G.b = Math.round(u); else G.t = Math.round(u * 2) / 2;
+    gDraw();
+  });
+  gsvg.addEventListener('pointerup', () => { G.drag = null; });
+  gsvg.setAttribute('tabindex', '0');
+  gsvg.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); G.t += e.key === 'ArrowLeft' ? -0.5 : 0.5; gDraw(); }
+  });
+  document.querySelectorAll('[data-rel]').forEach((b) => { b.onclick = () => { G.rel = b.dataset.rel; gDraw(); }; });
+  $('g-dec').onclick = () => { G.b -= 1; gDraw(); };
+  $('g-inc').onclick = () => { G.b += 1; gDraw(); };
+
+  /* ── part 2 ──────────────────────────────────────────────────────── */
+  const Fz = { a: 2, b: 5, k: -1 };
+  const fsvg = $('f-svg');
+  const relOf = (a, b) => (a < b ? '<' : a > b ? '>' : '=');
+  const esc = (s) => s.replace('<', '&lt;').replace('>', '&gt;');
+  function fDraw() {
+    const W = Math.max(280, Math.round(fsvg.clientWidth || 640)), H = 210, Y1 = 50, Y2 = 160;
+    const R = W < 520 ? 16 : 16, lo = -R, hi = R;
+    fsvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    fsvg.innerHTML = '';
+    const every = W < 520 ? 8 : 4;
+    const X = axis(fsvg, W, Y1, lo, hi, { every });
+    axis(fsvg, W, Y2, lo, hi, { every });
+    fsvg.appendChild(el('text', { x: 8, y: Y1 - 22, class: 'big' }, 'before'));
+    fsvg.appendChild(el('text', { x: 8, y: Y2 - 22, class: 'big' }, 'after × ' + num(Fz.k)));
+    const acc = css('--acc'), blue = css('--blue') || '#1f4fb5';
+    const ka = Fz.k * Fz.a, kb = Fz.k * Fz.b;
+    const link = (u, v, col) => fsvg.appendChild(el('line', { x1: X(u), y1: Y1 + 10, x2: X(v), y2: Y2 - 10, stroke: col, 'stroke-width': 2, 'stroke-dasharray': '5 4', opacity: .8 }));
+    link(Fz.a, ka, acc); link(Fz.b, kb, blue);
+    const dot = (u, y, col, name) => { fsvg.appendChild(el('circle', { cx: X(u), cy: y, r: 9, fill: col, stroke: '#fff', 'stroke-width': 2 })); fsvg.appendChild(el('text', { x: X(u), y: y - 15, 'text-anchor': 'middle', style: `fill:${col};font:800 13px var(--font-display)` }, name)); };
+    dot(Fz.a, Y1, acc, 'a'); dot(Fz.b, Y1, blue, 'b');
+    dot(ka, Y2, acc, num(ka)); dot(kb, Y2, blue, num(kb));
+    const r1 = relOf(Fz.a, Fz.b), r2 = relOf(ka, kb);
+    $('f-al').textContent = num(Fz.a); $('f-bl').textContent = num(Fz.b);
+    $('f-before').innerHTML = `<span class="a-c">${num(Fz.a)}</span> ${esc(r1)} <span class="b-c">${num(Fz.b)}</span>`;
+    $('f-afterk').textContent = 'After × ' + num(Fz.k);
+    $('f-after').innerHTML = `<span class="a-c">${num(ka)}</span> ${esc(r2)} <span class="b-c">${num(kb)}</span>`;
+    const badge = $('f-badge');
+    if (r1 === '=') { badge.className = 'badge eq'; badge.textContent = 'a and b are equal, so they stay equal. Pick two different numbers.'; }
+    else if (r1 !== r2) { badge.className = 'badge flip'; badge.textContent = `Multiplying by ${num(Fz.k)} turned the order around: ${r1} became ${r2}. The sign flips.`; }
+    else { badge.className = 'badge keep'; badge.textContent = `Multiplying by ${num(Fz.k)} kept the order: ${r1} stays ${r1}.`; }
+    document.querySelectorAll('[data-k]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.k) === Fz.k)));
+    fsvg.setAttribute('aria-label', `Before: a = ${num(Fz.a)}, b = ${num(Fz.b)}. After multiplying by ${num(Fz.k)}: ${num(ka)} and ${num(kb)}.`);
+  }
+  $('f-a').oninput = (e) => { Fz.a = Number(e.target.value); fDraw(); };
+  $('f-b').oninput = (e) => { Fz.b = Number(e.target.value); fDraw(); };
+  document.querySelectorAll('[data-k]').forEach((b) => { b.onclick = () => { Fz.k = Number(b.dataset.k); fDraw(); }; });
+
+  // embedded in a lesson page (same site): size the frame to fit, so there is no empty space or inner scrollbar
+  const fit = () => {
+    try {
+      const f = window.frameElement;
+      if (!f || !document.body.classList.contains('embed')) return;
+      const h = Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height) + 2;
+      if (Math.abs(f.getBoundingClientRect().height - h) > 2) f.style.height = h + 'px';
+    } catch (e) { /* different origin — keep the height the lesson gave */ }
+  };
+  const draw = () => { if (!$('graph').hidden) gDraw(); if (!$('flip').hidden) fDraw(); fit(); };
+  window.addEventListener('resize', draw);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+  draw();
+})();
+</script>
+</body>
+</html>
