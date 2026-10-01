@@ -154,7 +154,7 @@ export const COURSES = [
             md: 'lesson.md',
             kind: 'lesson',
             graded: true,
-            minutes: 45,
+            minutes: 55,
             added: '2026-09-29',
             tags: ['Geometry', 'angles', 'vertical angles', 'linear pair', 'supplementary', 'complementary', 'around a point', 'vertex', 'ray', 'segment', 'naming angles', 'step calculator', 'Regents'],
             materials: [

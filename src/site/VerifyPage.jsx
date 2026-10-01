@@ -24,8 +24,9 @@ function Tape({ p }) {
   (p.steps || []).forEach((s, i) => {
     if (s.kind === 'hint' || s.kind === 'note' || !s.to) {
       if (restore) back(i);
-      const cls = s.kind === 'hint' ? ' hint' : s.tag === 'slip' ? ' slip' : s.tag === 'read' || s.tag === 'graph' ? ' good' : '';
-      rows.push(<div key={i} className={`vf-tnote${cls}`}>{s.kind === 'hint' ? 'Hint: ' : s.tag === 'slip' ? '✗ ' : s.tag === 'read' || s.tag === 'graph' ? '✓ ' : ''}{s.text} <small>{s.t}s</small></div>);
+      const good = s.tag === 'read' || s.tag === 'graph' || s.tag === 'measure';
+      const cls = s.kind === 'hint' ? ' hint' : s.tag === 'slip' ? ' slip' : good ? ' good' : '';
+      rows.push(<div key={i} className={`vf-tnote${cls}`}>{s.kind === 'hint' ? 'Hint: ' : s.tag === 'slip' ? '✗ ' : good ? '✓ ' : ''}{s.text} <small>{s.t}s</small></div>);
       return;
     }
     if (!s.undone && restore) back(i);

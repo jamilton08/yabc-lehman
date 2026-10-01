@@ -155,6 +155,14 @@ points: 2
    > 2x + 40 = 6x − 12, so 52 = 4x and x = 13. The angle is 66°.
 6. angles around: x + 20 | 2x + 10 | 3x | 90 | find 3
    > 6x + 120 = 360, x = 40, and the angle marked 3x is 120°.
+7. angles linear: 5x - 12 | 3x + 8 | find 2
+   > 8x − 4 = 180, so x = 23. The question asks for the second angle: 3(23) + 8 = 77°. (The first is 103°, and 103 + 77 = 180.)
+8. angles complementary: x + 12 | 3x - 2
+   > 4x + 10 = 90, so x = 20. The angle is 20 + 12 = 32°, and the other is 58°.
+9. angles linear: x | 2x + 15 | 3x - 15 | find 3
+   > Three angles on one straight line still add up to 180°: 6x = 180, so x = 30, and the third angle is 3(30) − 15 = 75°.
+10. angles around: 2x | 3x + 15 | x + 45 | 120 | find 2
+   > 6x + 180 = 360, so x = 30. The angle marked 3x + 15 is 105°.
 ```
 
 ## Checkpoint
@@ -187,6 +195,14 @@ title: Checkpoint — angle rules
 6. [2 pts] Vertical angles measure $(4x - 12)^\circ$ and $(2x + 30)^\circ$. What is the measure of **each angle** (in degrees)?
    = 72
    > $4x - 12 = 2x + 30$, so $2x = 42$ and $x = 21$. The angle is $4(21) - 12 = 72^\circ$. If you typed 21, that is $x$, not the angle.
+
+7. [2 pts] Two angles form a linear pair. One is $24^\circ$ more than the other. What is the measure of the **larger** angle (in degrees)?
+   = 102
+   > Call the smaller one $x$. Then $x + (x + 24) = 180$, so $2x = 156$ and $x = 78$. The larger angle is $78 + 24 = 102^\circ$.
+
+8. $\angle 1$ and $\angle 2$ are complementary, and $m\angle 1$ is twice $m\angle 2$. What is $m\angle 1$ (in degrees)?
+   = 60
+   > Let $m\angle 2 = x$, so $m\angle 1 = 2x$. Then $2x + x = 90$, so $x = 30$ and $m\angle 1 = 60^\circ$.
 ```
 
 ## Wrap up

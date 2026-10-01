@@ -1,5 +1,5 @@
 /* ============================================================================
-   YABC STEP CALCULATOR  v1.1  —  Mr. Cruz · The Lehman YABC
+   YABC STEP CALCULATOR  v1.2  —  Mr. Cruz · The Lehman YABC
    A calculator for solving linear equations (and inequalities) one move at a
    time. The student decides every move; the calculator does the arithmetic
    and writes the work down on a tape, the way it would look on paper:
@@ -31,6 +31,19 @@
      • x disappears (4 > −3, 5 < 1): same "every number / no number" choice.
    Equations behave exactly as in v1.0.
 
+   Angle problems (v1.2) — a figure drawn to scale from the labels
+       angles linear: 3x + 10 | 2x - 5          rules: vertical (equal),
+       angles around: x + 20 | 2x | 3x | 90 | find 3     linear (180),
+                                                 complementary (90),
+                                                 around (360), triangle (180)
+     1. The student picks how the marked angles are related. The calculator
+        writes the equation from the rule (two misses → it shows the rule).
+     2. They solve it with the usual moves.
+     3. They type the angle measure — angle 1 unless "find n" says which.
+        (Skipped when that angle is just x.)
+     Half credit for a second pick, a second try on the angle, or any of the
+     usual reasons (hint, too many moves).
+
    Where it runs
      • Markdown lessons:  a ```calc block (the site loads this file on its own)
      • HTML lessons:      <script src="/lesson-kit/yabc-calc.js"></script>
@@ -54,6 +67,7 @@
           > Optional note, shown once the problem is done.
        6. -3x + 2 >= 14                          an inequality
           ? A question or story, shown above the problem (and in the result).
+       7. angles vertical: 3x + 10 | 5x - 20      an angle problem (below)
 
    Scoring (graded mode)
      solve:  solved with no hint, in par + slack moves or fewer → full points;
@@ -73,7 +87,7 @@
    ========================================================================== */
 (function () {
   'use strict';
-  var VERSION = '1.1';
+  var VERSION = '1.2';
   var MINUS = '−';
 
   function CalcError(msg) { this.message = msg; this.name = 'CalcError'; }
@@ -500,6 +514,146 @@
   }
   const graphWords = (g) => (g.circle ? g.circle + ' circle' : 'no circle') + ', ' + (g.side ? 'shaded ' + g.side : 'no shading');
 
+  /* ── angle problems (v1.2) ───────────────────────────────────────────
+     "angles linear: 3x + 10 | 2x - 5 | find 2" — a figure drawn to scale,
+     the student picks how the marked angles are related, the calculator
+     writes the equation, the student solves it and types the angle. */
+  const ANGLE_RELS = {
+    vertical: 'vertical', 'vertical-angles': 'vertical', equal: 'vertical',
+    linear: 'linear', 'linear-pair': 'linear', line: 'linear', straight: 'linear', 'straight-line': 'linear', supplementary: 'linear',
+    complementary: 'complementary', complement: 'complementary', right: 'complementary', 'right-angle': 'complementary',
+    around: 'around', 'around-a-point': 'around', point: 'around', full: 'around',
+    triangle: 'triangle',
+  };
+  const ANG = {
+    vertical:      { name: 'Vertical angles', pick: 'Equal — vertical angles', total: null, where: 'across from each other where two lines cross', rule: 'vertical angles are equal' },
+    linear:        { name: 'Linear pair', pick: 'Add to 180° — a straight line', total: 180, where: 'side by side on a straight line', rule: 'angles on a straight line add up to 180°' },
+    complementary: { name: 'Complementary', pick: 'Add to 90° — a right angle', total: 90, where: 'together filling a right angle', rule: 'angles that fill a right angle add up to 90°' },
+    around:        { name: 'Around a point', pick: 'Add to 360° — around a point', total: 360, where: 'all the way around one point', rule: 'angles all the way around a point add up to 360°' },
+    triangle:      { name: 'Triangle', pick: 'Add to 180° — a triangle', total: 180, where: 'the three corners inside a triangle', rule: 'the angles inside a triangle add up to 180°' },
+  };
+  /** Read the labels, solve the problem the right way, and check the figure is possible. */
+  function angleSetup(spec) {
+    const rel = spec.relation, R = ANG[rel];
+    if (!R) fail('“' + rel + '” is not an angle rule. Use vertical, linear, complementary, around, or triangle.');
+    const labels = spec.labels || [];
+    if (rel === 'vertical' && labels.length !== 2) fail('Vertical angles come in pairs — give exactly 2 angles.');
+    if (rel === 'triangle' && labels.length !== 3) fail('A triangle has 3 angles — give exactly 3.');
+    if (labels.length < 2) fail('Give at least 2 angles, separated by |.');
+    let v = null;
+    const sides = labels.map((l) => {
+      const p = parseEquation('(' + l + ') = 0');
+      if (hasX(p.st.L)) { if (v && v !== p.v) fail('Use one letter for the unknown in every angle.'); v = p.v; }
+      return p.st.L;
+    });
+    v = v || 'x';
+    if (!sides.some(hasX)) fail('None of the angles has ' + v + ' in it — nothing to solve.');
+    const write = rel === 'vertical'
+      ? labels[0] + ' = ' + labels[1]
+      : labels.map((l, i) => (sides[i].length > 1 || /^\s*[-−]/.test(l) ? '(' + l + ')' : l)).join(' + ') + ' = ' + R.total;
+    const st = parseEquation(write).st;
+    // solve it directly: a·x + b = c
+    const a = fadd(xCoef(st.L), fneg(xCoef(st.R))), b = fadd(evalSide(st.L, ZERO), fneg(evalSide(st.R, ZERO)));
+    if (isZero(a)) fail('The ' + v + '-terms cancel out, so ' + v + ' can’t be found. Check the angles.');
+    const xv = fdiv(fneg(b), a);
+    const values = sides.map((s) => evalSide(s, xv));
+    const cap = rel === 'complementary' ? 90 : rel === 'around' ? 360 : 180;
+    values.forEach((val, i) => {
+      if (fnum(val) <= 0 || fnum(val) >= cap) fail('With ' + v + ' = ' + ftext(xv) + ', angle ' + (i + 1) + ' would be ' + ftext(val) + '°. That figure can’t be drawn — check the angles.');
+    });
+    let find = spec.find;
+    if (find == null) find = Math.max(0, sides.findIndex(hasX));
+    if (find < 0 || find >= sides.length) fail('“find ' + (find + 1) + '” — there is no angle ' + (find + 1) + '.');
+    const disp = sides.map((s) => sideText(s, v));
+    const plainX = sides.map((s) => s.length === 1 && s[0].t === 'x' && isOne(s[0].c));
+    return { rel: rel, v: v, sides: sides, disp: disp, deg: disp.map((d, i) => (sides[i].length > 1 ? '(' + d + ')°' : d + '°')), st: st, write: write, xv: xv, values: values, find: find, plainX: plainX };
+  }
+
+  /* the figure, drawn to scale (SVG, y down; angles in degrees, counterclockwise) */
+  function figHtml(A, hi, tone) {
+    const W = 380, H = 230, vals = A.values.map(fnum), n = vals.length;
+    const rad = (d) => (d * Math.PI) / 180;
+    const pt = (cx, cy, r, d) => [cx + r * Math.cos(rad(d)), cy - r * Math.sin(rad(d))];
+    const f1 = (x) => Math.round(x * 10) / 10;
+    const ink = 'var(--yc-ink)', acc = tone === 'ok' ? 'var(--yc-ok)' : 'var(--yc-acc)';
+    let s = '';
+    const line = (a, b, w) => { s += '<line x1="' + f1(a[0]) + '" y1="' + f1(a[1]) + '" x2="' + f1(b[0]) + '" y2="' + f1(b[1]) + '" style="stroke:' + ink + ';stroke-width:' + (w || 2) + ';stroke-linecap:round"/>'; };
+    const arrow = (p, d) => { const a = pt(p[0], p[1], -11, d - 22), b = pt(p[0], p[1], -11, d + 22); s += '<polygon points="' + f1(p[0]) + ',' + f1(p[1]) + ' ' + f1(a[0]) + ',' + f1(a[1]) + ' ' + f1(b[0]) + ',' + f1(b[1]) + '" style="fill:' + ink + '"/>'; };
+    const ray = (c, d, len) => { const e = pt(c[0], c[1], len, d); line(c, e); arrow(e, d); };
+    /** how far out along the bisector a label must sit to clear both sides of its angle */
+    const labelR = (d1, d2, i, rMin, rMax) => {
+      const hw = A.deg[i].length * 4.5 + 3, hh = 10, half = (d2 - d1) / 2;
+      if (half >= 88) return Math.max(rMin, Math.hypot(hw, hh) + 6);
+      const need = (d) => hw * Math.abs(Math.sin(rad(d))) + hh * Math.abs(Math.cos(rad(d))) + 4;
+      return Math.max(rMin, Math.min(rMax, Math.max(need(d1), need(d2)) / Math.sin(rad(half))));
+    };
+    /** the mark for one angle (arc, or a square for 90°) + its label; i = which angle */
+    const mark = (c, d1, d2, r, i, rMax, outside) => {
+      const on = i === hi, span = d2 - d1, mid = (d1 + d2) / 2, sq = Math.abs(vals[i] - 90) < 1e-9;
+      if (on) { const a = pt(c[0], c[1], r + 10, d1), b = pt(c[0], c[1], r + 10, d2); s += '<path d="M' + f1(c[0]) + ' ' + f1(c[1]) + ' L' + f1(a[0]) + ' ' + f1(a[1]) + ' A' + (r + 10) + ' ' + (r + 10) + ' 0 ' + (span > 180 ? 1 : 0) + ' 0 ' + f1(b[0]) + ' ' + f1(b[1]) + 'Z" style="fill:' + acc + ';opacity:.16"/>'; }
+      const col = on ? acc : ink, w = on ? 2.6 : 1.6;
+      if (sq) {
+        const q = 13, a = pt(c[0], c[1], q, d1), b = pt(c[0], c[1], q * Math.SQRT2, mid), e = pt(c[0], c[1], q, d2);
+        s += '<polyline points="' + f1(a[0]) + ',' + f1(a[1]) + ' ' + f1(b[0]) + ',' + f1(b[1]) + ' ' + f1(e[0]) + ',' + f1(e[1]) + '" style="fill:none;stroke:' + col + ';stroke-width:' + w + '"/>';
+      } else {
+        const a = pt(c[0], c[1], r, d1), b = pt(c[0], c[1], r, d2);
+        s += '<path d="M' + f1(a[0]) + ' ' + f1(a[1]) + ' A' + r + ' ' + r + ' 0 ' + (span > 180 ? 1 : 0) + ' 0 ' + f1(b[0]) + ' ' + f1(b[1]) + '" style="fill:none;stroke:' + col + ';stroke-width:' + w + '"/>';
+      }
+      const rl = outside ? -(Math.hypot(A.deg[i].length * 4.5 + 3, 10) * 0.85 + 10) : labelR(d1, d2, i, r + 22, rMax || 140);
+      const p = pt(c[0], c[1], rl, mid);
+      s += '<text x="' + f1(p[0]) + '" y="' + f1(p[1] + 5) + '" text-anchor="middle" class="yc-fl' + (on ? ' on' : '') + '">' + esc(A.deg[i]) + '</text>';
+    };
+    const rel = A.rel;
+    if (rel === 'linear') {
+      const c = [W / 2, H - 46];
+      line([16, c[1]], [W - 16, c[1]]); arrow([W - 16, c[1]], 0); arrow([16, c[1]], 180);
+      let d = 0;
+      vals.forEach((val, i) => { if (i) ray(c, d, 150); mark(c, d, d + val, 24 + (i % 2) * 7, i); d += val; });
+    } else if (rel === 'vertical') {
+      const c = [W / 2, H / 2], th = vals[0], tilt = 12;
+      [tilt + th / 2, tilt - th / 2].forEach((dir) => {
+        const sn = Math.abs(Math.sin(rad(dir))), cs = Math.abs(Math.cos(rad(dir)));
+        const L = Math.min(sn > 1e-6 ? (H / 2 - 16) / sn : 1e9, cs > 1e-6 ? (W / 2 - 16) / cs : 1e9);
+        const a = pt(c[0], c[1], L, dir), b = pt(c[0], c[1], L, dir + 180);
+        line(a, b); arrow(a, dir); arrow(b, dir + 180);
+      });
+      mark(c, tilt - th / 2, tilt + th / 2, 26, 0, 165);
+      mark(c, tilt + 180 - th / 2, tilt + 180 + th / 2, 26, 1, 165);
+    } else if (rel === 'complementary') {
+      const c = [W / 2 - 50, H - 50];
+      line([16, c[1]], [W - 16, c[1]]); arrow([W - 16, c[1]], 0); arrow([16, c[1]], 180);
+      line([c[0], 12], [c[0], H - 8]); arrow([c[0], 12], 90); arrow([c[0], H - 8], 270);
+      const q = 13; s += '<polyline points="' + (c[0] - q) + ',' + c[1] + ' ' + (c[0] - q) + ',' + (c[1] + q) + ' ' + c[0] + ',' + (c[1] + q) + '" style="fill:none;stroke:' + ink + ';stroke-width:1.6"/>';
+      let d = 0;
+      vals.forEach((val, i) => { if (i) ray(c, d, 150); mark(c, d, d + val, 26 + (i % 2) * 7, i); d += val; });
+    } else if (rel === 'around') {
+      const c = [W / 2, H / 2];
+      let d = 90;
+      vals.forEach((val, i) => { ray(c, d, H / 2 - 14); d += val; });
+      d = 90;
+      vals.forEach((val, i) => { mark(c, d, d + val, 20 + (i % 2) * 6, i, 104); d += val; });
+    } else if (rel === 'triangle') {
+      const [al, be] = vals, ga = vals[2];
+      const ac = Math.sin(rad(be)) / Math.sin(rad(ga));
+      const P = [[0, 0], [1, 0], [ac * Math.cos(rad(al)), ac * Math.sin(rad(al))]];
+      const xs = P.map((p) => p[0]), ys = P.map((p) => p[1]);
+      const minX = Math.min(...xs), maxX = Math.max(...xs), maxY = Math.max(...ys);
+      const k = Math.min((W - 90) / (maxX - minX), (H - 76) / maxY);
+      const X = P.map((p) => [45 + (p[0] - minX) * k + ((W - 90) - (maxX - minX) * k) / 2, H - 36 - p[1] * k]);
+      const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+      s += '<polygon points="' + X.map((p) => f1(p[0]) + ',' + f1(p[1])).join(' ') + '" style="fill:none;stroke:' + ink + ';stroke-width:2;stroke-linejoin:round"/>';
+      const dirTo = (a, b) => (Math.atan2(-(b[1] - a[1]), b[0] - a[0]) * 180) / Math.PI;
+      X.forEach((p, i) => {
+        let d1 = dirTo(p, X[(i + 1) % 3]), d2 = dirTo(p, X[(i + 2) % 3]);
+        let lo = Math.min(d1, d2), hiD = Math.max(d1, d2);
+        if (hiD - lo > 180) { const t = lo; lo = hiD; hiD = t + 360; }
+        const room = 0.45 * Math.min(len(p, X[(i + 1) % 3]), len(p, X[(i + 2) % 3]));
+        mark(p, lo, hiD, 18, i, room, labelR(lo, hiD, i, 40, 1e9) > room);
+      });
+    }
+    return '<svg class="yc-figsvg" viewBox="-20 -6 ' + (W + 40) + ' ' + (H + 12) + '" role="img" aria-label="' + esc(ANG[rel].name + ' figure: ' + A.deg.join(', ')) + '">' + s + '</svg>';
+  }
+
   /* ── the block text ──────────────────────────────────────────────── */
   const SPOTS = {
     constants: 'constants', constant: 'constants', numbers: 'constants',
@@ -532,7 +686,15 @@
         const pm = /^\[(\d+(?:\.\d+)?)\s*pts?\]\s*/i.exec(body);
         if (pm) { spec.points = Number(pm[1]); body = body.slice(pm[0].length); }
         const sm = /^spot\s+([a-z-]+(?:\s+terms)?)\s*:\s*(.*)$/i.exec(body);
-        if (sm) {
+        const am = /^angles?\s+([a-z -]+?)\s*:\s*(.*)$/i.exec(body);
+        if (am) {
+          spec.kind = 'angles';
+          spec.relation = ANGLE_RELS[am[1].toLowerCase().replace(/\s+/g, '-')] || am[1].toLowerCase();
+          const parts = am[2].split('|').map((s) => s.trim()).filter(Boolean);
+          const fm = parts.length && /^find\s+(\d+)$/i.exec(parts[parts.length - 1]);
+          if (fm) { spec.find = Number(fm[1]) - 1; parts.pop(); }
+          spec.labels = parts;
+        } else if (sm) {
           spec.kind = 'spot';
           spec.spot = SPOTS[sm[1].toLowerCase().replace(/\s+/g, '-')] || 'constants';
           body = sm[2];
@@ -610,20 +772,20 @@
     '.yc-tape-head{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px dashed var(--yc-line);font:700 11.5px var(--font-display,Archivo,sans-serif);letter-spacing:.1em;text-transform:uppercase;color:var(--yc-mute)}',
     '.yc-tape-head span:first-child{color:var(--yc-ink)}.yc-tape-head .grow{flex:1}',
     '.yc-copy{font:600 12px var(--font-body,Inter,sans-serif)!important;text-transform:none;letter-spacing:0;padding:4px 9px;border:1px solid var(--yc-line);border-radius:6px;background:#fff;cursor:pointer;color:var(--yc-ink)}.yc-copy:hover{border-color:var(--yc-ink)}',
-    '.yc-rows{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);column-gap:8px;padding:10px 12px 14px;font:700 18px/1.35 var(--font-display,Archivo,Inter,sans-serif);font-variant-numeric:tabular-nums;overflow-x:auto}',
+    '.yc-rows{display:grid;grid-template-columns:minmax(max-content,1fr) auto minmax(max-content,1fr);column-gap:8px;padding:10px 12px 14px;font:700 18px/1.35 var(--font-display,Archivo,Inter,sans-serif);font-variant-numeric:tabular-nums;overflow-x:auto}',
     '.yc-rows>div{padding:3px 0}.yc-rows .yc-t{padding:0;border:0}',
     '.yc-l{justify-self:end;text-align:right;white-space:nowrap}.yc-r{justify-self:start;white-space:nowrap}.yc-e{text-align:center;opacity:.8}',
     '.yc-op{color:var(--yc-acc);font-size:.9em;border-bottom:1.5px solid var(--yc-ink);padding:0 .2em 2px!important;margin-bottom:3px}.yc-opsym{margin-right:.08em}',
-    '.yc-say{grid-column:1/-1;font:600 12.5px/1.3 var(--font-body,Inter,sans-serif);color:var(--yc-mute);margin-top:8px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}',
+    '.yc-say{grid-column:1/-1;contain:inline-size;font:600 12.5px/1.3 var(--font-body,Inter,sans-serif);color:var(--yc-mute);margin-top:8px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}',
     '.yc-say b{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--yc-ink);color:#fff;font:700 11px var(--font-display,Archivo,sans-serif)}',
     '.yc-say i{font-style:normal;opacity:.8}',
     '.yc-rows .is-undone{opacity:.42;text-decoration:line-through;text-decoration-thickness:2px}.yc-say.is-undone b{background:var(--yc-mute)}',
-    '.yc-note{grid-column:1/-1;font:600 12.5px/1.35 var(--font-body,Inter,sans-serif);margin:8px 0 2px;padding:5px 9px;border-radius:6px;background:var(--yc-paper);color:var(--yc-mute)}',
+    '.yc-note{grid-column:1/-1;contain:inline-size;font:600 12.5px/1.35 var(--font-body,Inter,sans-serif);margin:8px 0 2px;padding:5px 9px;border-radius:6px;background:var(--yc-paper);color:var(--yc-mute)}',
     '.yc-note.hint{background:#fff3d6;color:var(--yc-warn)}.yc-note.back{background:none;padding:0 0 0 2px}',
     '.yc-note.slip{background:#fbe9e6;color:var(--yc-bad)}.yc-note.good{background:#eaf5ee;color:var(--yc-ok)}',
     '.yc-rows .yc-win{color:var(--yc-ok);font-weight:800}.yc-rows .yc-win .yc-v{color:var(--yc-ok)}.yc-rows .yc-l.yc-win,.yc-rows .yc-r.yc-win{border-bottom:3px double var(--yc-ok)}',
-    '.yc .yc-check{grid-column:1/-1;margin-top:8px;font:600 13.5px/1.4 var(--font-body,Inter,sans-serif);color:var(--yc-ok)}',
-    '.yc .yc-empty{grid-column:1/-1;margin-bottom:0;font:500 13.5px var(--font-body,Inter,sans-serif);color:var(--yc-mute);margin-top:6px}',
+    '.yc .yc-check{grid-column:1/-1;contain:inline-size;margin-top:8px;font:600 13.5px/1.4 var(--font-body,Inter,sans-serif);color:var(--yc-ok)}',
+    '.yc .yc-empty{grid-column:1/-1;contain:inline-size;margin-bottom:0;font:500 13.5px var(--font-body,Inter,sans-serif);color:var(--yc-mute);margin-top:6px}',
     '.yc-done{margin:12px 18px 0;padding:12px 14px;border:1.5px solid var(--yc-ok);border-radius:10px;background:#eaf5ee;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:15px}',
     '.yc-done.is-half{border-color:#c98a14;background:#fff6e0}.yc-done.is-wrong{border-color:var(--yc-bad);background:#fbe9e6}',
     '.yc-done strong{font:800 18px var(--font-display,Archivo,sans-serif)}.yc-done .grow{flex:1}.yc-done .why{flex-basis:100%;font-size:14px;color:var(--yc-mute)}',
@@ -647,6 +809,14 @@
     '.yc-gb .dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:2.5px solid currentColor}.yc-gb .dot.f{background:currentColor}',
     '.yc-gcheck{margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}',
     '.yc-done .yc-nl{flex-basis:100%;max-width:520px;margin:2px 0 0}',
+    '.yc-fig{margin:0 18px 12px;padding:6px 10px;border:1.5px solid var(--yc-line);border-radius:12px;background:#fff;display:flex;justify-content:center}',
+    '.yc-figsvg{display:block;width:100%;max-width:440px;height:auto}',
+    '.yc-figsvg .yc-fl{font:800 15px var(--font-display,Archivo,Inter,sans-serif);fill:var(--yc-ink);paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}.yc-figsvg .yc-fl.on{fill:var(--yc-acc)}',
+    '.yc-setup .yc-opts{margin-top:10px}',
+    '.yc-measure{margin:10px 18px 0;padding:12px 14px 14px;border:1.5px solid var(--yc-ink);border-radius:10px;background:#fff}',
+    '.yc-measure>p{font-size:15px}.yc-mrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}',
+    '.yc-mrow label{display:inline-flex;align-items:center;gap:4px;font:800 20px var(--font-display,Archivo,sans-serif)}',
+    '.yc-mrow input{width:7.5em;font:700 18px var(--font-display,Archivo,sans-serif);padding:8px 10px;border:1.5px solid var(--yc-ink);border-radius:8px;background:#fff;color:var(--yc-ink)}',
     '.yc-spot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 18px 18px}',
     '.yc-spot .yc-note{margin:0;flex-basis:100%}',
     '.yc .yc-err{margin:12px 18px 18px;padding:10px 14px;border:1.5px dashed var(--yc-bad);border-radius:10px;color:var(--yc-bad);font-size:14.5px}',
@@ -678,6 +848,7 @@
       title: cfg.title || '', moves: cfg.moves || 'both', points: cfg.points || 2, slack: cfg.slack == null ? 1 : cfg.slack, hints: cfg.hints !== false, graph: cfg.graph !== false,
       problems: (cfg.problems || []).map((p) => (typeof p === 'string' ? parseBlock('1. ' + p).problems[0] : p)).filter(Boolean),
     };
+    block.hasTriangle = block.problems.some((p) => p.kind === 'angles' && ANGLE_RELS[p.relation] === 'triangle');
     const EXAMPLES = cfg.examples || ['2x + 3 = 11', '7x - 4 = 3x + 12', 'x/4 + 2 = 9', '3(x + 4) = 21', '5 - 2x = 3x - 10', '2x + 5 = 2x + 9'];
     if (!block.title) block.title = free ? 'Step calculator' : 'Solve it step by step';
     const tapMoves = block.moves !== 'type', padShown = block.moves !== 'tap';
@@ -691,6 +862,13 @@
         slips: [], flipQ: null, reading: null, graphing: null, graph: null, final: null };
       try {
         if (!spec.eq) fail('No equation was given.');
+        if (spec.kind === 'angles') {
+          const A = angleSetup(spec);
+          P.ang = A; P.v = A.v; P.orig = A.st; P.cur = clone(A.st);
+          P.par = par(P.orig, P.v);
+          P.setup = { given: [], done: false, revealed: false };
+          return P;
+        }
         const parsed = parseEquation(spec.eq);
         P.v = parsed.v; P.orig = parsed.st; P.cur = clone(parsed.st);
         if (spec.kind === 'solve') {
@@ -711,9 +889,9 @@
     const movesOf = (P) => P.steps.filter((s) => isMove(s) && !s.undone).length;
     const live = () => cfg.enabled && !cfg.locked && !S.destroyed;
     /** waiting on a question (keep/flip, read it, graph it, what x vanishing means) — no moves until it is answered */
-    const busy = (P) => Boolean(P.pending || P.flipQ || P.reading || P.graphing);
+    const busy = (P) => Boolean(P.pending || P.flipQ || P.reading || P.graphing || P.measuring || (P.setup && !P.setup.done));
     /** past the moves: reading or graphing the answer — undo is off from here */
-    const settled = (P) => Boolean(P.reading || P.graphing);
+    const settled = (P) => Boolean(P.reading || P.graphing || P.measuring || (P.setup && !P.setup.done));
     /** a phone-width calculator gets a shorter number line with bigger labels */
     const narrow = () => (el.clientWidth || 600) < 520;
 
@@ -734,6 +912,10 @@
       if (P.slips.some((s) => s.kind === 'read')) r.push('misread the answer from ' + P.v + '’s side');
       if (P.graph && P.graph.missed) r.push('the graph was missed');
       else if (P.graph && P.graph.tries > 1) r.push('second try on the graph');
+      if (P.setup && P.setup.revealed) r.push('the rule was shown after two wrong picks');
+      else if (P.setup && P.setup.given.length > 1) r.push('wrong rule on the first pick');
+      if (P.measure && P.measure.missed) r.push('the angle was missed');
+      else if (P.measure && P.measure.tries > 1) r.push('second try on the angle');
       return r;
     }
     function totals() {
@@ -759,6 +941,11 @@
       if (P.spec.ask) o.ask = P.spec.ask;
       if (P.error) { o.error = P.error; return o; }
       if (P.spec.kind === 'spot') { o.start = eqText(P.orig, P.v); o.spot = P.spec.spot; o.tries = P.spot.tries; o.picks = P.spot.given; o.answer = P.spot.correct.map((p) => labelOf(P, p)); return o; }
+      if (P.spec.kind === 'angles') {
+        o.relation = P.ang.rel; o.labels = P.ang.disp; o.setup = { given: P.setup.given.slice(), done: P.setup.done, revealed: P.setup.revealed };
+        if (P.measure) o.measure = { asked: P.measure.asked, given: P.measure.given.slice(), answer: P.measure.answer, missed: P.measure.missed };
+        if (!P.setup.done) { o.par = P.par; o.moves = 0; o.hints = P.hints; o.undos = P.undos; o.steps = P.steps.map((s) => stepOut(s, P.v)); return o; }
+      }
       o.start = eqText(P.orig, P.v); o.startSides = [sideText(P.orig.L, P.v), sideText(P.orig.R, P.v)]; o.par = P.par; o.moves = movesOf(P); o.hints = P.hints; o.undos = P.undos;
       if (isIneq(P.orig)) o.startRel = relOf(P.orig);
       if (P.answer) o.answer = P.answer;
@@ -821,6 +1008,7 @@
     }
     /** x is alone on the left: write the answer + check; inequalities go on to the graph */
     function finishSolved(P, rel, value, flipped) {
+      if (P.spec.kind === 'angles') { angleStage(P, value, flipped); return; }
       P.answer = ansText(rel, value, P.v);
       const ro = relOf(P.orig);
       if (rel === '=') {
@@ -920,6 +1108,78 @@
       report();
     }
 
+    /* ── angles: pick the rule ── */
+    function pickRule(P, rel) {
+      const s = P.setup, A = P.ang;
+      if (!s || s.done || P.status !== 'open' || !ANG[rel]) return;
+      if (s.given.indexOf(ANG[rel].name) >= 0) return;
+      if (!P.t0) P.t0 = Date.now();
+      s.given.push(ANG[rel].name);
+      const right = rel === A.rel;
+      log('calc', { p: P.n, do: 'rule', given: ANG[rel].name, right: right });
+      if (right || (graded && s.given.length >= 2)) {
+        s.done = true; s.revealed = !right;
+        say(right ? 'Right — ' + ANG[A.rel].rule + '. The calculator wrote the equation. Now solve it.'
+          : 'Not this time. The marked angles are ' + ANG[A.rel].where + ', and ' + ANG[A.rel].rule + '. Here is the equation — solve it.', right ? 'ok' : 'bad');
+        const o = outcome(P.cur);
+        if (o && o.kind === 'solved') finishSolved(P, o.rel, o.value, o.flipped);
+      } else {
+        say('Not that one: the marked angles are not ' + ANG[rel].where + '. Look again at where they sit.' + (graded ? ' One more pick — after that the calculator shows you, for half credit.' : ''), 'bad');
+      }
+      report();
+    }
+    /** x is found: check the angles, then ask for the one the problem wants (unless that angle is just x) */
+    function angleStage(P, xv, flipped) {
+      const A = P.ang, v = P.v, vals = A.sides.map((sd) => evalSide(sd, xv)), k = A.find;
+      const each = A.disp.map((d, i) => (A.plainX[i] ? '' : d + ' = ') + ftext(vals[i]) + '°');
+      if (A.rel === 'vertical') P.check = 'Check ' + v + ' = ' + ftext(xv) + ': ' + each.join(' and ') + (feq(vals[0], vals[1]) ? ' — equal ✓' : ' ✗');
+      else {
+        const tot = vals.reduce((a, b) => fadd(a, b), ZERO);
+        P.check = 'Check ' + v + ' = ' + ftext(xv) + ': ' + each.join(', ') + '; ' + vals.map((x) => ftext(x)).join(' + ') + ' = ' + ftext(tot) + (fnum(tot) === ANG[A.rel].total ? ' ✓' : ' ✗');
+      }
+      P.final = { value: xv };
+      const ans = vals[k];
+      if (A.plainX[k]) {
+        P.measure = { k: k, asked: '#' + (k + 1) + ', marked ' + A.deg[k], answer: ftext(ans) + '°', value: ans, given: [], tries: 0, missed: false, done: true, auto: true };
+        P.answer = v + ' = ' + ftext(xv) + '°';
+        P.status = 'solved'; P.earned = scoreOf(P);
+        say(flipped ? ftext(xv) + ' = ' + v + ' is the same as ' + v + ' = ' + ftext(xv) + '. The angle marked ' + v + '° is ' + ftext(xv) + '°.' : 'The angle marked ' + v + '° is ' + ftext(xv) + '°.', 'ok');
+        return;
+      }
+      P.measuring = true;
+      P.measure = { k: k, asked: '#' + (k + 1) + ', marked ' + A.deg[k], answer: ftext(ans) + '°', value: ans, given: [], tries: 0, missed: false, done: false, draft: '' };
+      say((flipped ? ftext(xv) + ' = ' + v + ' means ' : '') + v + ' = ' + ftext(xv) + '. That is ' + v + ' — not the angle yet.', 'ok');
+    }
+    function readNumber(text) {
+      const t = String(text || '').replace(/[°\s]/g, '').replace(/[−–—]/g, '-');
+      let m;
+      if ((m = /^(-?\d+)\/(\d+)$/.exec(t)) && Number(m[2]) !== 0) return F(Number(m[1]), Number(m[2]));
+      if (/^-?(\d+\.?\d*|\.\d+)$/.test(t)) return t[0] === '-' ? fneg(decimal(t.slice(1))) : decimal(t);
+      return null;
+    }
+    function measureCheck(P) {
+      const M = P.measure;
+      if (!P.measuring || !M || M.done) return;
+      const g = readNumber(M.draft);
+      if (!g) { say('Type the angle as a number, like 115.', 'bad'); return; }
+      const right = feq(g, M.value) || Math.abs(fnum(g) - fnum(M.value)) < 0.01;
+      M.tries++; M.given.push(ftext(g));
+      log('calc', { p: P.n, do: 'angle', given: ftext(g), right: right });
+      const A = P.ang, xv = P.final.value, v = P.v, lbl = A.disp[M.k];
+      if (right || (graded && M.tries >= 2)) {
+        if (!right) M.missed = true;
+        M.done = true; P.measuring = false;
+        P.steps.push({ kind: 'measure', text: 'angle marked ' + A.deg[M.k] + ': ' + lbl + ' at ' + v + ' = ' + ftext(xv) + ' is ' + M.answer + (right ? (M.tries > 1 ? ' (second try)' : '') : ' (missed — shown)'), t: secs(P) });
+        P.answer = v + ' = ' + ftext(xv) + ', angle = ' + M.answer;
+        P.status = 'solved'; P.earned = scoreOf(P);
+        say(right ? (M.tries > 1 ? 'Right on the second try.' : 'Right — the angle is ' + M.answer + '.') : 'Not this time. ' + lbl + ' at ' + v + ' = ' + ftext(xv) + ' is ' + M.answer + '.', right ? 'ok' : 'bad');
+      } else {
+        const isX = feq(g, xv);
+        say((isX ? 'That is ' + v + ', not the angle. ' : 'Not quite. ') + 'Plug ' + v + ' = ' + ftext(xv) + ' into ' + lbl + ' and work it out.' + (graded ? ' One more try — for half credit.' : ''), 'bad');
+      }
+      report();
+    }
+
     function undo(P) {
       if (P.status !== 'open') return;
       if (P.flipQ) { P.flipQ = null; S.sel = null; say('Move cancelled.'); log('calc', { p: P.n, do: 'cancel' }); report(); return; }
@@ -947,6 +1207,8 @@
     }
     function hintText(P, pl) {
       const v = P.v;
+      if (P.setup && !P.setup.done) return 'Look at where the marked angles sit. They are ' + ANG[P.ang.rel].where + '.';
+      if (P.measuring) return v + ' = ' + ftext(P.final.value) + '. The angle is marked ' + P.ang.deg[P.measure.k] + ', so put ' + ftext(P.final.value) + ' in for ' + v + ' in ' + P.ang.disp[P.measure.k] + ' and work it out.';
       if (P.flipQ) { const st = P.flipQ.step; return 'Look only at the number you are ' + opVerb(st) + ' by: ' + ftext(st.val) + '. ' + (st.val.n < 0 ? 'It is negative, and multiplying or dividing by a negative flips the sign.' : 'It is positive, and a positive never flips the sign.'); }
       if (P.reading) return 'Read it from ' + v + '’s side: ' + eqText(P.cur, v) + ' says the same thing as ' + ansText(P.reading.rel, P.reading.value, v) + '. The sign turns around when the sides swap.';
       if (P.graphing) { const a = P.graph.answer, rel = P.final.rel, val = ftext(P.final.value); return (a.circle === 'closed' ? 'Closed circle — ' + rel + ' includes ' + val + '.' : 'Open circle — ' + rel + ' does not include ' + val + '.') + ' Shade ' + a.side + ', where ' + ftext(testPoint(rel, P.final.value)) + ' and the other numbers that work are.'; }
@@ -1111,7 +1373,7 @@
     }
     function press(k) {
       const P = cur();
-      if (!P || P.status !== 'open' || busy(P) || P.spec.kind !== 'solve' || !live()) return;
+      if (!P || P.status !== 'open' || busy(P) || P.spec.kind === 'spot' || !live()) return;
       const e = S.entry;
       say('');
       if (k === '+' || k === '-' || k === '*' || k === '/') e.op = k;
@@ -1179,9 +1441,10 @@
       const ineq = !P.error && isIneq(P.orig);
       let h = '<div class="yc-task"><div class="yc-task-text"><b>' + (free ? 'Solve' : 'Problem ' + P.n) + '</b>';
       if (P.spec.kind === 'spot') h += SPOT_ASK[P.spec.spot].replace(/\{v\}/g, esc(v));
+      else if (P.spec.kind === 'angles') h += 'Read the figure and pick the rule. Then solve for <i>' + esc(v) + '</i> and find the angle.';
       else h += 'Get <i>' + esc(v) + '</i> alone' + (ineq && block.graph ? ', then graph it' : '') + '. ' + (tapMoves && padShown ? 'Tap a term or key in a move.' : tapMoves ? 'Tap the terms to make your moves.' : 'Key in each move.');
       h += '</div><div class="yc-pills">';
-      if (P.spec.kind === 'solve' && !P.error) h += '<span class="yc-pill" title="The fewest moves the textbook route takes">Par ' + P.par + '</span>';
+      if (P.spec.kind !== 'spot' && !P.error) h += '<span class="yc-pill" title="The fewest moves the textbook route takes">Par ' + P.par + '</span>';
       if (graded) h += '<span class="yc-pill">' + fmtPts(P.spec.points) + ' pt' + (P.spec.points === 1 ? '' : 's') + '</span>';
       h += '</div></div>';
       if (P.spec.ask) h += '<p class="yc-ask">' + esc(prettyMinus(P.spec.ask)) + '</p>';
@@ -1206,6 +1469,19 @@
         return h;
       }
 
+      if (P.spec.kind === 'angles') {
+        const hiA = P.measuring || (P.measure && !P.measure.auto) ? P.measure.k : -1;
+        h += '<div class="yc-fig">' + figHtml(P.ang, hiA, open ? 'acc' : 'ok') + '</div>';
+        if (!P.setup.done) {
+          const s = P.setup, rels = ['vertical', 'linear', 'complementary', 'around'].concat(block.hasTriangle ? ['triangle'] : []);
+          h += '<p class="yc-msg ' + S.msgKind + '" aria-live="polite">' + esc(S.msg) + '</p>';
+          h += '<div class="yc-special yc-setup"><p><b>How are the marked angles related?</b> Pick the rule. The calculator writes the equation from your pick.</p><div class="yc-opts">'
+            + rels.map((r) => '<button type="button" class="yc-opt' + (s.given.indexOf(ANG[r].name) >= 0 ? ' alt' : '') + '" data-rule="' + r + '" data-fid="rule-' + r + '"' + (off || s.given.indexOf(ANG[r].name) >= 0 ? ' disabled' : '') + '>' + esc(ANG[r].pick) + '</button>').join('')
+            + '</div></div>';
+          if (block.hints) h += '<div class="yc-tools" role="group" aria-label="Tools"><button type="button" class="yc-tool' + (S.armed === P.n ? ' is-armed' : '') + '" data-act="hint" data-fid="hint"' + (off ? ' disabled' : '') + '>' + (S.armed === P.n ? 'Show hint (half credit)' : 'Hint') + '</button></div>';
+          return h + '<div style="height:18px"></div>';
+        }
+      }
       const ctx = { v: v, gran: 'term', live: open && !busy(P), sel: S.sel, off: off };
       h += '<div class="yc-screen"><div class="yc-eqn">' + sideHtml(P.cur.L, 'L', ctx) + '<span class="yc-eqs">' + esc(relOf(P.cur)) + '</span>' + sideHtml(P.cur.R, 'R', ctx) + '</div>';
       if (padShown && open && !busy(P)) h += '<div class="yc-entry" aria-live="polite">' + entryHtml(P) + '</div>';
@@ -1228,6 +1504,12 @@
           + '</div></div>';
       } else if (P.graphing) {
         h += graphHtml(P, off);
+      } else if (P.measuring) {
+        const M = P.measure;
+        h += '<div class="yc-measure"><p><b>' + esc(v) + ' = ' + esc(ftext(P.final.value)) + '.</b> Now find the angle: what is the measure of the angle marked <b>' + esc(P.ang.deg[M.k]) + '</b>?</p>'
+          + '<div class="yc-mrow"><label><input type="text" inputmode="decimal" class="yc-mi" data-fid="measure-in" value="' + esc(M.draft) + '" aria-label="Angle measure in degrees" autocomplete="off" spellcheck="false"' + (off ? ' disabled' : '') + ' />°</label>'
+          + '<button type="button" class="yc-opt" data-act="m-check" data-fid="m-check"' + (off ? ' disabled' : '') + '>' + (M.tries ? 'Check again' : 'Check') + '</button>'
+          + (graded && M.tries ? '<span class="yc-pill">Last try — half credit</span>' : '') + '</div></div>';
       } else if (P.pending) {
         h += '<div class="yc-special"><p><b>' + esc(v) + ' is gone.</b> You are left with <b>' + esc(eqText(P.cur, v)) + '</b>. What does that mean?</p><div class="yc-opts">'
           + '<button type="button" class="yc-opt" data-act="sp-none" data-fid="sp-none"' + (off ? ' disabled' : '') + '>No number works — no solution</button>'
@@ -1310,12 +1592,16 @@
       const v = P.v;
       let h = '<div class="yc-tape"><div class="yc-tape-head"><span>Your work</span><span>' + movesOf(P) + ' move' + (movesOf(P) === 1 ? '' : 's') + '</span><span class="grow"></span>'
         + (P.steps.length ? '<button type="button" class="yc-copy" data-act="copy" data-fid="copy">Copy</button>' : '') + '</div><div class="yc-rows">';
+      if (P.spec.kind === 'angles' && P.setup) {
+        P.setup.given.forEach((g, i) => { const last = i === P.setup.given.length - 1, ok = last && P.setup.done && !P.setup.revealed; h += '<div class="yc-note ' + (ok ? 'good' : 'slip') + '">' + (ok ? '✓ ' : '✗ ') + 'picked: ' + esc(g) + '</div>'; });
+        if (P.setup.done) h += '<div class="yc-note' + (P.setup.revealed ? '' : ' good') + '">' + esc((P.setup.revealed ? 'Shown: ' : '') + ANG[P.ang.rel].rule + ', so ' + P.ang.write.replace(/-/g, MINUS)) + '</div>';
+      }
       h += rowHtml(P.orig, v, '');
       let n = 0, restore = null;
       const flush = () => { if (restore) { h += '<div class="yc-note back">↩ back to</div>' + rowHtml(restore, v, ''); restore = null; } };
       const lastLive = (() => { for (let i = P.steps.length - 1; i >= 0; i--) if (isMove(P.steps[i]) && !P.steps[i].undone) return i; return -1; })();
       P.steps.forEach((s, i) => {
-        if (!isMove(s)) { flush(); h += '<div class="yc-note' + (s.kind === 'hint' ? ' hint' : s.kind === 'slip' ? ' slip' : s.kind === 'read' || s.kind === 'graph' ? ' good' : '') + '">' + (s.kind === 'hint' ? 'Hint: ' : s.kind === 'slip' ? '✗ ' : s.kind === 'read' || s.kind === 'graph' ? '✓ ' : '') + esc(s.text) + '</div>'; return; }
+        if (!isMove(s)) { const good = s.kind === 'read' || s.kind === 'graph' || s.kind === 'measure'; flush(); h += '<div class="yc-note' + (s.kind === 'hint' ? ' hint' : s.kind === 'slip' ? ' slip' : good ? ' good' : '') + '">' + (s.kind === 'hint' ? 'Hint: ' : s.kind === 'slip' ? '✗ ' : good ? '✓ ' : '') + esc(s.text) + '</div>'; return; }
         if (!s.undone) { if (restore) flush(); n++; }
         const u = s.undone ? ' is-undone' : '';
         h += '<div class="yc-say' + u + '"><b>' + (s.undone ? '×' : n) + '</b><span>' + esc(s.say) + (s.undone ? ' — undone' : '') + '</span>' + (s.at ? '<i>· ' + (s.via === 'keys' ? 'keyed, with ' : 'tapped ') + esc(s.at) + '</i>' : s.via === 'keys' ? '<i>· keyed</i>' : '') + '</div>';
@@ -1333,7 +1619,7 @@
 
     /* plain-text copy of the work */
     function workText(P) {
-      const v = P.v, lines = ['Solve: ' + eqText(P.orig, v), '  ' + eqText(P.orig, v)];
+      const v = P.v, lines = P.spec.kind === 'angles' ? [ANG[P.ang.rel].name + ': ' + P.ang.deg.join(', '), 'Rule: ' + ANG[P.ang.rel].rule + ', so ' + P.ang.write, '  ' + eqText(P.orig, v)] : ['Solve: ' + eqText(P.orig, v), '  ' + eqText(P.orig, v)];
       let n = 0;
       P.steps.forEach((s) => {
         if (!isMove(s)) { lines.push('  [' + (s.kind === 'hint' ? 'hint: ' : '') + s.text + ']'); return; }
@@ -1420,12 +1706,14 @@
       }
       if (b.hasAttribute('data-opt')) { const d = S.sel ? describe(P, S.sel) : null; const o = d && d.opts[Number(b.getAttribute('data-opt'))]; if (o) guard(() => doStep(P, o.step)); return; }
       if (b.hasAttribute('data-read')) { readAnswer(P, b.getAttribute('data-read')); render(); return; }
+      if (b.hasAttribute('data-rule')) { guard(() => pickRule(P, b.getAttribute('data-rule'))); return; }
       const act = b.getAttribute('data-act');
       if (act === 'flip-keep' || act === 'flip-flip') { guard(() => flipAnswer(P, act === 'flip-flip' ? 'flip' : 'keep')); return; }
       if (act === 'flip-cancel') { undo(P); render(); return; }
       if (act === 'g-open' || act === 'g-closed') { graphSet(P, 'circle', act.slice(2)); render(); return; }
       if (act === 'g-left' || act === 'g-right') { graphSet(P, 'side', act.slice(2)); render(); return; }
       if (act === 'g-check') { graphCheck(P); render(); return; }
+      if (act === 'm-check') { measureCheck(P); render(); return; }
       if (act === 'combine') guard(() => doStep(P, { kind: 'combine', via: 'button' }));
       else if (act === 'distribute') guard(() => doStep(P, { kind: 'distribute', via: 'button' }));
       else if (act === 'undo') { undo(P); render(); }
@@ -1438,10 +1726,14 @@
     const KEYMAP = { '+': '+', '-': '-', '−': '-', '*': '*', 'x': 'x', 'X': 'x', Enter: 'go', '=': 'go', Backspace: 'back', Delete: 'clear', Escape: 'clear' };
     function onKey(ev) {
       const tag = ev.target && ev.target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') { if (ev.key === 'Enter' && ev.target.classList.contains('yc-free-in')) { ev.preventDefault(); freeLoad(ev.target.value); render(); } return; }
+      if (tag === 'INPUT' || tag === 'TEXTAREA') {
+        if (ev.key === 'Enter' && ev.target.classList.contains('yc-free-in')) { ev.preventDefault(); freeLoad(ev.target.value); render(); }
+        else if (ev.key === 'Enter' && ev.target.classList.contains('yc-mi')) { ev.preventDefault(); const P = cur(); if (P && live()) { P.measure.draft = ev.target.value; measureCheck(P); render(); } }
+        return;
+      }
       if (ev.ctrlKey || ev.metaKey || ev.altKey) { if ((ev.ctrlKey || ev.metaKey) && ev.key === 'z') { const P = cur(); if (P && live()) { ev.preventDefault(); undo(P); render(); } } return; }
       const P = cur();
-      if (!P || !live() || P.spec.kind !== 'solve' || P.status !== 'open' || !padShown || busy(P)) return;
+      if (!P || !live() || P.spec.kind === 'spot' || P.status !== 'open' || !padShown || busy(P)) return;
       let k = KEYMAP[ev.key];
       if (/^\d$/.test(ev.key)) k = ev.key;
       if (ev.key === P.v || ev.key === P.v.toUpperCase()) k = 'x';
@@ -1451,7 +1743,11 @@
       ev.preventDefault();
       guard(() => press(k));
     }
-    function onInput(ev) { if (ev.target.classList && ev.target.classList.contains('yc-free-in')) S.freeText = ev.target.value; }
+    function onInput(ev) {
+      if (!ev.target.classList) return;
+      if (ev.target.classList.contains('yc-free-in')) S.freeText = ev.target.value;
+      else if (ev.target.classList.contains('yc-mi')) { const P = cur(); if (P && P.measure) P.measure.draft = ev.target.value; }
+    }
     el.addEventListener('click', onClick);
     el.addEventListener('keydown', onKey);
     el.addEventListener('input', onInput);
@@ -1469,7 +1765,7 @@
   const API = {
     version: VERSION, mount: mount, parseBlock: parseBlock, parseEquation: parseEquation,
     plan: plan, par: par, outcome: outcome, applyOp: applyOp, applyCombine: applyCombine, applyDistribute: applyDistribute,
-    eqText: eqText, holds: holds, F: F, CalcError: CalcError,
+    eqText: eqText, holds: holds, angleSetup: angleSetup, F: F, CalcError: CalcError,
   };
   if (typeof window !== 'undefined') window.YABCCalc = API;
   if (typeof module === 'object' && module.exports) module.exports = API;
